@@ -31,17 +31,17 @@ export function useHospitalPrintSettings() {
       )
       const fetched = normalizeHospitalPrintSettings(data.settings)
       
-      // Override empty header/address/phone with activeHospital values if available
-      if (activeHospital?.name && fetched.headerTitle === DEFAULT_HOSPITAL_PRINT_SETTINGS.headerTitle) {
+      // Override empty or generic header/address/phone with activeHospital values if available
+      if (activeHospital?.name && (!fetched.headerTitle || fetched.headerTitle === "HARMONY HEALTHCARE" || fetched.headerTitle === "Medical Center" || fetched.headerTitle === "Hospital Healthcare Center")) {
         fetched.headerTitle = activeHospital.name
       }
-      if (activeHospital?.address && fetched.address === DEFAULT_HOSPITAL_PRINT_SETTINGS.address) {
+      if (activeHospital?.address && (!fetched.address || fetched.address === DEFAULT_HOSPITAL_PRINT_SETTINGS.address)) {
         fetched.address = activeHospital.address
       }
-      if (activeHospital?.phone && fetched.phone === DEFAULT_HOSPITAL_PRINT_SETTINGS.phone) {
+      if (activeHospital?.phone && (!fetched.phone || fetched.phone === DEFAULT_HOSPITAL_PRINT_SETTINGS.phone)) {
         fetched.phone = activeHospital.phone
       }
-      if (activeHospital?.email && fetched.email === DEFAULT_HOSPITAL_PRINT_SETTINGS.email) {
+      if (activeHospital?.email && (!fetched.email || fetched.email === DEFAULT_HOSPITAL_PRINT_SETTINGS.email)) {
         fetched.email = activeHospital.email
       }
 
@@ -49,7 +49,7 @@ export function useHospitalPrintSettings() {
     } catch {
       setSettings((prev) => ({
         ...DEFAULT_HOSPITAL_PRINT_SETTINGS,
-        headerTitle: activeHospital?.name || DEFAULT_HOSPITAL_PRINT_SETTINGS.headerTitle,
+        headerTitle: activeHospital?.name || "",
         address: activeHospital?.address || DEFAULT_HOSPITAL_PRINT_SETTINGS.address,
         phone: activeHospital?.phone || DEFAULT_HOSPITAL_PRINT_SETTINGS.phone,
         email: activeHospital?.email || DEFAULT_HOSPITAL_PRINT_SETTINGS.email,

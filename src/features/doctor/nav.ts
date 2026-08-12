@@ -3,7 +3,6 @@ export type DoctorNavId =
   | "home"
   | "inpatients"
   | "settings"
-  | "book"
   | "documents"
   | "analytics"
   | "profile"
@@ -16,7 +15,6 @@ export const SETTINGS_NAV_IDS: DoctorNavId[] = [
   "about",
   "analytics",
   "documents",
-  "book",
 ]
 
 export const DOCTOR_NAV_LABELS: Record<DoctorNavId, string> = {
@@ -24,7 +22,6 @@ export const DOCTOR_NAV_LABELS: Record<DoctorNavId, string> = {
   home: "Overview",
   inpatients: "Inpatients",
   settings: "Settings",
-  book: "Book Visit",
   documents: "Documents",
   analytics: "Insights",
   profile: "Profile",
@@ -36,7 +33,6 @@ export const DOCTOR_NAV_SUBTITLES: Record<DoctorNavId, string> = {
   home: "Start of day overview",
   inpatients: "Admitted patients",
   settings: "Account & practice tools",
-  book: "Usually via reception",
   documents: "Cross-patient file search",
   analytics: "Practice insights",
   profile: "Your account",
@@ -57,7 +53,7 @@ export interface SettingsHubItem {
   href: string
   label: string
   description: string
-  group: "account" | "practice" | "scheduling"
+  group: "account" | "practice"
 }
 
 export function buildDoctorNavItems(): DoctorNavItem[] {
@@ -124,13 +120,6 @@ export function getSettingsHubItems(): SettingsHubItem[] {
       description: "Search documents across patients. During consults, use patient workspace reports.",
       group: "practice",
     },
-    {
-      id: "book",
-      href: "/doctor-dashboard/book-appointment",
-      label: DOCTOR_NAV_LABELS.book,
-      description: "Schedule a visit when reception is unavailable.",
-      group: "scheduling",
-    },
   ]
 }
 
@@ -155,8 +144,7 @@ export function isSettingsRoute(pathname: string): boolean {
     pathname.startsWith("/doctor-dashboard/profile") ||
     pathname.startsWith("/doctor-dashboard/about") ||
     pathname.startsWith("/doctor-dashboard/analytics") ||
-    pathname.startsWith("/doctor-dashboard/documents") ||
-    pathname.startsWith("/doctor-dashboard/book-appointment")
+    pathname.startsWith("/doctor-dashboard/documents")
   )
 }
 
@@ -191,9 +179,6 @@ export function getDoctorPageMeta(pathname: string): { label: string; subtitle: 
   }
   if (pathname.startsWith("/doctor-dashboard/documents")) {
     return { label: DOCTOR_NAV_LABELS.documents, subtitle: "Settings · Practice tools" }
-  }
-  if (pathname.startsWith("/doctor-dashboard/book-appointment")) {
-    return { label: DOCTOR_NAV_LABELS.book, subtitle: "Settings · Scheduling" }
   }
   if (pathname.startsWith("/doctor-dashboard/anatomy")) {
     return { label: "Consultation", subtitle: "Clinical workspace" }

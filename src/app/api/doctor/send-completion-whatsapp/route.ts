@@ -12,6 +12,7 @@ import {
 import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { sendDocumentMessage } from "@/server/metaWhatsApp"
+import { isValid6DigitPatientId } from "@/shared/utils/printConverters"
 import { getPrescriptionPDFBuffer } from "@/shared/utils/documents/pdfGenerators"
 import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
 import { getHospitalCollectionPath, getAppointmentHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
@@ -94,13 +95,17 @@ export async function POST(request: Request) {
     }
 
     // Get phone and name
+    // Get phone, name, and 6-digit Patient ID
     let phone = patientPhone || (fullAppointment?.patientPhone as string) || ""
     let name = (patientName || fullAppointment?.patientName || "Patient") as string
-    if ((!phone || phone.trim() === "") || (!name || name.trim() === "" || name === "Patient")) {
-      try {
-        const patientDoc = await db.collection("patients").doc(patientId).get()
+    let resolved6DigitPatientId: string | undefined = undefined
+
+    try {
+      const targetUid = patientId || fullAppointment?.patientUid || fullAppointment?.patientId
+      if (targetUid) {
+        const patientDoc = await db.collection("patients").doc(targetUid).get()
         if (patientDoc.exists) {
-          const patientData = patientDoc.data()
+          const patientData = patientDoc.data() || {}
           if (!phone || phone.trim() === "") {
             phone = patientData?.phone || patientData?.phoneNumber || patientData?.contact || ""
           }
@@ -110,10 +115,25 @@ export async function POST(request: Request) {
               (patientData?.fullName as string) ||
               "Patient"
           }
+          const candidate = patientData?.patientId || patientData?.patientSequentialId || patientData?.patientDisplayId || patientData?.hospitalPatientId || patientData?.customPatientId || patientData?.patientNo || patientData?.patientNumber || patientData?.uhid || patientData?.pid
+          if (candidate != null && isValid6DigitPatientId(candidate)) {
+            resolved6DigitPatientId = String(candidate).trim()
+          }
         }
-      } catch {
-        // ignore
+
+        if (!resolved6DigitPatientId && appointmentHospitalId) {
+          const hospPatientDoc = await db.collection("hospitals").doc(appointmentHospitalId).collection("patients").doc(targetUid).get()
+          if (hospPatientDoc.exists) {
+            const hData = hospPatientDoc.data() || {}
+            const candidate = hData.patientId || hData.patientSequentialId || hData.patientDisplayId || hData.hospitalPatientId || hData.customPatientId || hData.patientNo || hData.patientNumber || hData.uhid || hData.pid
+            if (candidate != null && isValid6DigitPatientId(candidate)) {
+              resolved6DigitPatientId = String(candidate).trim()
+            }
+          }
+        }
       }
+    } catch {
+      // ignore
     }
 
     if (!phone || phone.trim() === "") {
@@ -122,6 +142,38 @@ export async function POST(request: Request) {
         error: "Patient phone number not found",
         message: "Checkup completed but WhatsApp message not sent (no phone number)"
       }, { status: 200 })
+    }
+
+    // Fetch hospital specific name, reviewLink, and settings for PDF header branding
+    let hospitalDisplayName = "our hospital"
+    let hospitalReviewLink = ""
+    let hospitalSettings: any = undefined
+    if (appointmentHospitalId) {
+      try {
+        const hospSnap = await db.collection("hospitals").doc(appointmentHospitalId).get()
+        if (hospSnap.exists) {
+          const hospData = hospSnap.data() || {}
+          if (hospData.name) hospitalDisplayName = hospData.name.trim()
+          hospitalReviewLink =
+            (hospData.settings?.general?.reviewLink as string)?.trim() ||
+            (hospData.reviewLink as string)?.trim() ||
+            ""
+
+          hospitalSettings = {
+            headerTitle: hospData.name?.trim() || hospData.settings?.print?.headerTitle,
+            headerSubtitle: hospData.settings?.print?.headerSubtitle || "Multi-Specialty Healthcare Services",
+            address: hospData.address || hospData.settings?.print?.address,
+            phone: hospData.phone || hospData.settings?.print?.phone,
+            email: hospData.email || hospData.settings?.print?.email,
+            logoUrl: hospData.settings?.print?.logoUrl || hospData.logoUrl,
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (!hospitalReviewLink && process.env.GOOGLE_REVIEW_LINK) {
+      hospitalReviewLink = process.env.GOOGLE_REVIEW_LINK.trim()
     }
 
     // Generate prescription PDF and store for WhatsApp document (fees + medicine)
@@ -135,14 +187,21 @@ export async function POST(request: Request) {
     if (hasCompletionData && fullAppointment) {
       const apt = fullAppointment
       try {
+        const aptPid = typeof apt.patientId === "string" ? apt.patientId : undefined
+        const aptSeqId = typeof (apt as any).patientSequentialId === "string" ? (apt as any).patientSequentialId : undefined
+        const effectivePatientId = resolved6DigitPatientId ||
+          (isValid6DigitPatientId(aptPid) ? aptPid : undefined) ||
+          (isValid6DigitPatientId(aptSeqId) ? aptSeqId : "N/A")
+
         const appointmentForPdf = {
           ...apt,
           id: appointmentId,
-          patientId: apt.patientId || patientId,
+          patientId: effectivePatientId,
+          patientUid: apt.patientUid || apt.patientId || patientId,
           patientName: apt.patientName || name,
           patientPhone: phone,
         } as Parameters<typeof getPrescriptionPDFBuffer>[0]
-        const pdfBuffer = getPrescriptionPDFBuffer(appointmentForPdf)
+        const pdfBuffer = getPrescriptionPDFBuffer(appointmentForPdf, hospitalSettings)
         const pdfBase64 = pdfBuffer.toString("base64")
         const expiresAt = new Date()
         expiresAt.setDate(expiresAt.getDate() + 7)
@@ -161,28 +220,6 @@ export async function POST(request: Request) {
         // Don't fail completion if PDF fails - log and continue
         console.error("[send-completion-whatsapp] Prescription PDF generation failed:", pdfErr)
       }
-    }
-
-    // Fetch hospital specific name and reviewLink
-    let hospitalDisplayName = "our hospital"
-    let hospitalReviewLink = ""
-    if (appointmentHospitalId) {
-      try {
-        const hospSnap = await db.collection("hospitals").doc(appointmentHospitalId).get()
-        if (hospSnap.exists) {
-          const hospData = hospSnap.data() || {}
-          if (hospData.name) hospitalDisplayName = hospData.name.trim()
-          hospitalReviewLink =
-            (hospData.settings?.general?.reviewLink as string)?.trim() ||
-            (hospData.reviewLink as string)?.trim() ||
-            ""
-        }
-      } catch {
-        // ignore
-      }
-    }
-    if (!hospitalReviewLink && process.env.GOOGLE_REVIEW_LINK) {
-      hospitalReviewLink = process.env.GOOGLE_REVIEW_LINK.trim()
     }
 
     // Build completion message according to hospital review link setting

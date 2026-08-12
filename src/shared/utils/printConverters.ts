@@ -12,8 +12,154 @@ import {
 } from "@/types/print"
 import { calculateAge } from "@/shared/utils/shared/date"
 
-import { parsePrescription } from "@/shared/utils/appointments/prescriptionParsers"
+import { parsePrescription, extractStructuredMedicines } from "@/shared/utils/appointments/prescriptionParsers"
 import { splitConsultationNotes } from "@/features/doctor/clinical/consultation/consultationNotesUtils"
+import { doc, getDoc } from "firebase/firestore"
+import { db } from "@/firebase/config"
+
+export function parseAndCleanClinicalNotes(rawNotes?: string | null): {
+  diagnosisFromNotes?: string
+  examinationFromNotes?: string
+  cleanAdvice?: string
+} {
+  if (!rawNotes || typeof rawNotes !== "string") return {}
+
+  const text = rawNotes.trim()
+  if (!text) return {}
+
+  let diagnosisFromNotes: string | undefined = undefined
+  let examinationFromNotes: string | undefined = undefined
+
+  const diagMatch = text.match(/(?:^|\n)---\s*Diagnosis\s*---\n?([\s\S]*?)(?=(?:\n---\s*|$))/i)
+  if (diagMatch && diagMatch[1]?.trim()) {
+    diagnosisFromNotes = diagMatch[1].trim()
+  }
+
+  const examMatch = text.match(/(?:^|\n)---\s*Examination findings\s*---\n?([\s\S]*?)(?=(?:\n---\s*|$))/i)
+  if (examMatch && examMatch[1]?.trim()) {
+    examinationFromNotes = examMatch[1].trim()
+  }
+
+  const cleanAdvice = text
+    .replace(/(?:^|\n)---\s*Diagnosis\s*---\n?[\s\S]*?(?=(?:\n---\s*|$))/gi, "")
+    .replace(/(?:^|\n)---\s*Examination findings\s*---\n?[\s\S]*?(?=(?:\n---\s*|$))/gi, "")
+    .replace(/🧾\s*\*?Prescription\*?/gi, "")
+    .replace(/📌\s*\*?Advice:\*?/gi, "")
+    .replace(/\*[1-9]️⃣\s+.*?\*/g, "")
+    .replace(/\n{2,}/g, "\n")
+    .trim()
+
+  return {
+    diagnosisFromNotes,
+    examinationFromNotes,
+    cleanAdvice: cleanAdvice || undefined,
+  }
+}
+
+/**
+ * Checks if a given ID string or number is a valid 6-digit or short hospital Patient ID.
+ * Rejects Firebase/Firestore Auth UIDs (which are 20-36 alphanumeric characters without spaces/dashes e.g. Duse8hYO50RAm51t0m5cAS6iPVh1).
+ */
+export function isValid6DigitPatientId(id?: string | number | null): boolean {
+  if (id == null) return false
+  const str = String(id).trim()
+  if (!str) return false
+
+  // Firebase Auth UIDs are 20+ alphanumeric characters without hyphens or spaces
+  if (str.length >= 20 && !str.includes("-") && !str.includes(" ")) {
+    return false
+  }
+
+  return true
+}
+
+/**
+ * Resolves the 6-digit hospital Patient ID for PDF display.
+ * NEVER returns Firebase/Firestore Auth UIDs.
+ */
+export function resolveDisplayPatientId(
+  patientId?: string | number | null,
+  patientUid?: string | number | null,
+  patientSequentialId?: string | number | null,
+  patientObj?: any
+): string {
+  const candidates = [
+    patientId,
+    patientSequentialId,
+    patientObj?.patientId,
+    patientObj?.patientSequentialId,
+    patientObj?.patientDisplayId,
+    patientObj?.customPatientId,
+    patientObj?.hospitalPatientId,
+    patientObj?.patientNumber,
+    patientObj?.patientNo,
+    patientObj?.patientCode,
+    patientObj?.uhid,
+    patientObj?.pid,
+    patientObj?.patientData?.patientId,
+    patientObj?.patientDetails?.patientId,
+    patientUid,
+  ]
+
+  for (const cand of candidates) {
+    if (cand != null && isValid6DigitPatientId(cand)) {
+      return String(cand).trim()
+    }
+  }
+
+  return "N/A"
+}
+
+/**
+ * Client-side helper to fetch the 6-digit Patient ID from root patients, hospital subcollection, or users collection.
+ */
+export async function fetch6DigitPatientId(
+  targetUid?: string | null,
+  hospitalId?: string | null
+): Promise<string | undefined> {
+  if (!targetUid || typeof targetUid !== "string" || !targetUid.trim()) return undefined
+  const uid = targetUid.trim()
+
+  try {
+    // 1. Root patients collection
+    const snap = await getDoc(doc(db, "patients", uid))
+    if (snap.exists()) {
+      const data = snap.data() || {}
+      const candidate = data.patientId || data.patientSequentialId || data.patientDisplayId || data.hospitalPatientId || data.customPatientId || data.patientNo || data.patientNumber || data.uhid || data.pid
+      if (candidate != null && isValid6DigitPatientId(candidate)) {
+        return String(candidate).trim()
+      }
+    }
+  } catch {}
+
+  if (hospitalId && typeof hospitalId === "string" && hospitalId.trim()) {
+    try {
+      // 2. Hospital-scoped patients subcollection
+      const snapHosp = await getDoc(doc(db, "hospitals", hospitalId.trim(), "patients", uid))
+      if (snapHosp.exists()) {
+        const data = snapHosp.data() || {}
+        const candidate = data.patientId || data.patientSequentialId || data.patientDisplayId || data.hospitalPatientId || data.customPatientId || data.patientNo || data.patientNumber || data.uhid || data.pid
+        if (candidate != null && isValid6DigitPatientId(candidate)) {
+          return String(candidate).trim()
+        }
+      }
+    } catch {}
+  }
+
+  try {
+    // 3. Users collection
+    const snapUser = await getDoc(doc(db, "users", uid))
+    if (snapUser.exists()) {
+      const data = snapUser.data() || {}
+      const candidate = data.patientId || data.patientSequentialId || data.patientDisplayId || data.hospitalPatientId || data.customPatientId || data.patientNo || data.patientNumber || data.uhid || data.pid
+      if (candidate != null && isValid6DigitPatientId(candidate)) {
+        return String(candidate).trim()
+      }
+    }
+  } catch {}
+
+  return undefined
+}
 
 export function convertAppointmentToPrintData(apt: Appointment): PrintAppointmentData {
   const rawAge = apt.patientDateOfBirth ? calculateAge(apt.patientDateOfBirth) : undefined
@@ -64,7 +210,7 @@ export function convertAppointmentToPrintData(apt: Appointment): PrintAppointmen
     appointmentDate: apt.appointmentDate || new Date().toISOString().split("T")[0],
     appointmentTime: apt.appointmentTime || "Not specified",
     patient: {
-      id: apt.patientId || apt.patientUid,
+      id: resolveDisplayPatientId(apt.patientId, apt.patientUid, (apt as any).patientSequentialId, apt),
       name: apt.patientName || "Valued Patient",
       age,
       phone: apt.patientPhone,
@@ -160,7 +306,7 @@ export function convertBillingToPrintData(record: BillingRecord): PrintBillingDa
     invoiceNumber: record.id || "INV-" + Date.now().toString().slice(-6),
     invoiceDate: record.generatedAt ? new Date(record.generatedAt).toLocaleDateString() : new Date().toLocaleDateString(),
     patient: {
-      id: record.patientId || record.patientUid || undefined,
+      id: resolveDisplayPatientId(record.patientId, record.patientUid, (record as any).patientSequentialId, record),
       name: record.patientName || "Patient",
     },
     doctor: record.doctorName ? { id: record.doctorId, name: record.doctorName } : undefined,
@@ -186,28 +332,41 @@ export function convertPrescriptionToPrintData(
   const rawAge = apt.patientDateOfBirth ? calculateAge(apt.patientDateOfBirth) : undefined
   const age = rawAge ?? undefined
 
-  const medicines = formEntry?.medicines && formEntry.medicines.length > 0
-    ? formEntry.medicines.filter((m) => m.name && m.name.trim()).map((m) => ({
-        name: m.name.trim(),
-        dosage: m.dosage || "As advised",
-        frequency: m.frequency || "Once daily",
-        duration: m.duration || "5 days",
-      }))
-    : apt.medicine
-    ? [{ name: apt.medicine, dosage: "As advised", frequency: "As directed", duration: "Standard" }]
-    : []
+  const medicines = extractStructuredMedicines(apt, formEntry?.medicines)
 
-  const formattedDiagnosis = formEntry?.finalDiagnosis?.length
+  const rawNotesStr = formEntry?.notes?.trim() || apt.doctorNotes?.trim() || undefined
+  const parsedNotes = parseAndCleanClinicalNotes(rawNotesStr)
+
+  let formattedDiagnosis: string | string[] | undefined = formEntry?.finalDiagnosis?.length
     ? formEntry.finalDiagnosis
     : apt.finalDiagnosis?.length
     ? apt.finalDiagnosis
-    : formEntry?.customDiagnosis || apt.customDiagnosis || undefined
+    : formEntry?.customDiagnosis || apt.customDiagnosis || parsedNotes.diagnosisFromNotes || undefined
+
+  if (typeof formattedDiagnosis === "string") {
+    formattedDiagnosis = formattedDiagnosis.trim() || undefined
+  }
+
+  const examinationFindings = (formEntry as any)?.examinationFindings?.trim() || (apt as any)?.examinationFindings?.trim() || parsedNotes.examinationFromNotes || undefined
+  const assessment = formEntry?.assessment?.trim() || apt.assessment?.trim() || (!examinationFindings ? parsedNotes.examinationFromNotes : undefined) || undefined
+  const investigations = (formEntry as any)?.investigations?.trim() || (apt as any)?.investigations?.trim() || (apt as any)?.investigationAdvice?.trim() || undefined
+  const cleanNotes = parsedNotes.cleanAdvice
+  const recheckupNote = formEntry?.recheckupNote?.trim() || (apt as any)?.recheckupNote?.trim() || (apt as any)?.followUpAdvice?.trim() || undefined
+
+  const dateStr = apt.appointmentDate
+    ? new Date(apt.appointmentDate).toLocaleDateString("en-IN", { dateStyle: "medium" })
+    : new Date().toLocaleDateString("en-IN", { dateStyle: "medium" })
+
+  const rawHosp = ((apt as any).hospitalName || (apt as any).branchName || "").trim()
+  const cleanHospName = rawHosp ? rawHosp.replace(/\bHospital\s+Hospital\b/gi, "Hospital").trim() : undefined
 
   return {
     prescriptionId: apt.id || "RX-" + Date.now().toString().slice(-6),
-    date: new Date().toLocaleDateString("en-IN", { dateStyle: "medium" }),
+    date: dateStr,
+    hospitalName: cleanHospName,
+    hospitalId: (apt as any).hospitalId,
     patient: {
-      id: apt.patientId || apt.patientUid,
+      id: resolveDisplayPatientId(apt.patientId, apt.patientUid, (apt as any).patientSequentialId, apt),
       name: apt.patientName || "Patient",
       age,
       gender: apt.patientGender,
@@ -215,8 +374,9 @@ export function convertPrescriptionToPrintData(
     },
     doctor: {
       id: apt.doctorId,
-      name: apt.doctorName || "Dr. Medical Practitioner",
+      name: apt.doctorName || "Attending Doctor",
       specialization: apt.doctorSpecialization,
+      licenseNo: (apt as any).doctorLicenseNo || (apt as any).licenseNo || (apt as any).registrationNo,
     },
     vitals: {
       bp: apt.vitalBloodPressure,
@@ -229,10 +389,14 @@ export function convertPrescriptionToPrintData(
     },
     chiefComplaints: apt.chiefComplaint,
     medicalHistory: apt.medicalHistory,
+    assessment,
+    examinationFindings,
     diagnosis: formattedDiagnosis,
+    investigations,
     medicines,
-    notes: formEntry?.notes || apt.doctorNotes || undefined,
-    recheckupNote: formEntry?.recheckupNote,
+    notes: cleanNotes,
+    advice: cleanNotes,
+    recheckupNote,
   }
 }
 
@@ -244,7 +408,7 @@ export function convertAdmissionToPrintData(adm: Admission): PrintAdmissionData 
     admitTime: adm.checkInAt ? new Date(adm.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined,
     admitType: adm.admitType || "planned",
     patient: {
-      id: adm.patientId || adm.patientUid,
+      id: resolveDisplayPatientId(adm.patientId, adm.patientUid, (adm as any).patientSequentialId, adm),
       name: adm.patientName || "Inpatient",
       phone: adm.patientPhone || undefined,
       gender: adm.patientGender || undefined,
@@ -289,7 +453,7 @@ export function convertDischargeToPrintData(adm: Admission): PrintDischargeData 
     dischargeDate: adm.checkOutAt ? new Date(adm.checkOutAt).toLocaleDateString() : new Date().toLocaleDateString(),
     stayDurationDays: stayDays,
     patient: {
-      id: adm.patientId || adm.patientUid,
+      id: resolveDisplayPatientId(adm.patientId, adm.patientUid, (adm as any).patientSequentialId, adm),
       name: adm.patientName || "Patient",
       phone: adm.patientPhone || undefined,
       gender: adm.patientGender || undefined,
@@ -318,7 +482,7 @@ export function convertLabReportToPrintData(doc: DocumentMetadata): PrintLabRepo
     category: doc.fileType === "radiology-report" ? "Radiology" : doc.fileType === "cardiology-report" ? "Cardiology" : "Laboratory",
     testDate: doc.appointmentDate || doc.uploadedAt ? new Date(doc.appointmentDate || doc.uploadedAt).toLocaleDateString() : new Date().toLocaleDateString(),
     patient: {
-      id: doc.patientId || doc.patientUid,
+      id: resolveDisplayPatientId(doc.patientId, doc.patientUid, (doc as any).patientSequentialId, doc),
       name: doc.patientName || "Patient",
     },
     doctor: doc.doctorName ? { id: doc.doctorId, name: doc.doctorName } : undefined,

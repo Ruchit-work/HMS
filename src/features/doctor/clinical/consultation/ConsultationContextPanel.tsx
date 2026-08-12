@@ -198,7 +198,7 @@ export default function ConsultationContextPanel({
       )}
 
       <ClinicalPanel
-        title="Visit timeline"
+        title="History"
         icon={<History className="w-3.5 h-3.5" />}
         className="shrink-0"
         collapsible

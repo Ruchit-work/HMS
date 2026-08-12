@@ -5,7 +5,6 @@
  */
 
 import { Appointment } from "@/types/patient"
-import { calculateAge } from "@/shared/utils/shared/date"
 import { formatDateForPDF } from "@/shared/utils/shared/timezone"
 import type {
   HospitalPrintSettings,
@@ -17,12 +16,27 @@ import type {
   PrintLabReportData,
 } from "@/types/print"
 
+import { extractStructuredMedicines } from "@/shared/utils/appointments/prescriptionParsers"
+import { convertPrescriptionToPrintData } from "@/shared/utils/printConverters"
+
+import { renderHTMLToPdfOpen } from "./html2pdfEngine"
 import {
   renderDocumentToPDFAndOpen,
+  renderPrescriptionDocumentHTML,
   buildStandardDocumentHTML,
   type StandardDocumentConfig,
   type DocumentTotalsRow,
 } from "./documentTemplateEngine"
+
+export function extractMedicinesFromAppointment(appointment: Appointment): Array<{
+  name: string
+  dosage: string
+  frequency: string
+  duration: string
+  instructions?: string
+}> {
+  return extractStructuredMedicines(appointment)
+}
 
 // ============================================================================
 // Shared Helper Functions & Formatting
@@ -78,13 +92,6 @@ export function generateAppointmentSlipPDF(
       title: "Patient Information",
       lines: [
         { label: "Patient Name", value: data.patient.name, isBold: true },
-        { label: "Patient ID", value: data.patient.id },
-        {
-          label: "Age & Gender",
-          value: data.patient.age
-            ? `${data.patient.age} Yrs / ${safeText(data.patient.gender, "N/A")}`
-            : data.patient.gender,
-        },
         { label: "Phone", value: data.patient.phone },
         { label: "Emergency Contact", value: data.patient.emergencyContact },
       ],
@@ -235,7 +242,6 @@ export function generateBillingInvoicePDF(
         title: "Billed To (Patient)",
         lines: [
           { label: "Patient Name", value: data.patient.name, isBold: true },
-          { label: "Patient ID", value: data.patient.id },
           { label: "Phone", value: data.patient.phone },
           { label: "Address", value: data.patient.address },
         ],
@@ -277,83 +283,10 @@ export function generatePrescriptionPDFNew(
   data: PrintPrescriptionData,
   hospitalSettings?: HospitalPrintSettings
 ): void {
-  const tableRows = data.medicines.map((med, idx) => ({
-    idx: idx + 1,
-    name: med.name,
-    dosage: med.dosage,
-    frequency: med.frequency,
-    duration: med.duration,
-  }))
-
-  const vitalsParts: string[] = []
-  if (data.vitals?.bp) vitalsParts.push(`BP: ${data.vitals.bp}`)
-  if (data.vitals?.temperature) vitalsParts.push(`Temp: ${data.vitals.temperature}°C`)
-  if (data.vitals?.heartRate) vitalsParts.push(`Pulse: ${data.vitals.heartRate} bpm`)
-  if (data.vitals?.spO2) vitalsParts.push(`SpO2: ${data.vitals.spO2}%`)
-
-  const adviceParts: string[] = []
-  if (data.notes) adviceParts.push(data.notes)
-  if (data.recheckupNote) adviceParts.push(`Recheckup: ${data.recheckupNote}`)
-
-  const config: StandardDocumentConfig = {
-    docTitle: "Medical Prescription (Rx)",
-    docId: data.prescriptionId || "RX",
-    docDate: data.date,
-    hospitalSettings,
-    infoCards: [
-      {
-        title: "Patient Details",
-        lines: [
-          { label: "Patient Name", value: data.patient.name, isBold: true },
-          { label: "Patient ID", value: data.patient.id },
-          {
-            label: "Age & Gender",
-            value: data.patient.age
-              ? `${data.patient.age} Yrs / ${safeText(data.patient.gender, "N/A")}`
-              : data.patient.gender,
-          },
-          { label: "Phone", value: data.patient.phone },
-        ],
-      },
-      {
-        title: "Prescribing Doctor",
-        lines: [
-          { label: "Doctor Name", value: `Dr. ${data.doctor.name}`, isBold: true },
-          { label: "Specialization", value: data.doctor.specialization },
-          { label: "Qualification", value: data.doctor.qualification },
-        ],
-      },
-    ],
-    bannerStrip: vitalsParts.length
-      ? {
-          title: "Vitals Summary",
-          text: vitalsParts.join("  |  "),
-          tone: "info",
-        }
-      : undefined,
-    table: {
-      columns: [
-        { header: "#", key: "idx", width: "8%", align: "center" },
-        { header: "Medicine Name", key: "name", width: "37%" },
-        { header: "Dosage", key: "dosage", width: "18%" },
-        { header: "Frequency", key: "frequency", width: "22%" },
-        { header: "Duration", key: "duration", width: "15%" },
-      ],
-      rows: tableRows,
-    },
-    adviceBox: adviceParts.length
-      ? {
-          title: "Special Advice & Instructions",
-          text: adviceParts.join(" | "),
-        }
-      : undefined,
-    signatureBox: {
-      title: "Doctor Signature & Stamp",
-      name: data.doctor.name,
-    },
-  }
-
-  void renderDocumentToPDFAndOpen(config, `Prescription_${data.patient.name}.pdf`)
+  const html = renderPrescriptionDocumentHTML(data, hospitalSettings)
+  const safeName = (data.patient.name || "Patient").replace(/\s+/g, "_")
+  const safeDate = (data.date || "").replace(/[\s,/]+/g, "_")
+  void renderHTMLToPdfOpen(html, `Prescription_${safeName}_${safeDate}.pdf`)
 }
 
 // ============================================================================
@@ -378,13 +311,6 @@ export function generateAdmissionFormPDF(
         title: "Patient Information",
         lines: [
           { label: "Patient Name", value: data.patient.name, isBold: true },
-          { label: "Patient ID", value: data.patient.id },
-          {
-            label: "Age & Gender",
-            value: data.patient.age
-              ? `${data.patient.age} Yrs / ${safeText(data.patient.gender, "N/A")}`
-              : data.patient.gender,
-          },
           { label: "Phone", value: data.patient.phone },
           { label: "Emergency Contact", value: data.patient.emergencyContact },
         ],
@@ -439,7 +365,6 @@ export function generateDischargeSummaryPDF(
         title: "Patient Details",
         lines: [
           { label: "Patient Name", value: data.patient.name, isBold: true },
-          { label: "Patient ID", value: data.patient.id },
           { label: "Phone", value: data.patient.phone },
         ],
       },
@@ -500,7 +425,6 @@ export function generateLabReportPDF(
         title: "Patient Details",
         lines: [
           { label: "Patient Name", value: data.patient.name, isBold: true },
-          { label: "Patient ID", value: data.patient.id },
           { label: "Phone", value: data.patient.phone },
         ],
       },
@@ -586,7 +510,6 @@ export function generateAppointmentConfirmationPDFBase64(
         title: "Patient Details",
         lines: [
           { label: "Patient Name", value: appointment.patientName, isBold: true },
-          { label: "Patient ID", value: appointment.patientId },
         ],
       },
       {
@@ -605,50 +528,15 @@ export function generatePrescriptionPDF(
   appointment: Appointment,
   hospitalSettings?: HospitalPrintSettings
 ) {
-  generatePrescriptionPDFNew(
-    {
-      prescriptionId: appointment.id,
-      date: new Date().toLocaleDateString("en-IN", { dateStyle: "medium" }),
-      patient: {
-        id: appointment.patientId,
-        name: appointment.patientName,
-        age: appointment.patientDateOfBirth ? calculateAge(appointment.patientDateOfBirth) ?? undefined : undefined,
-        gender: appointment.patientGender,
-        phone: appointment.patientPhone,
-      },
-      doctor: {
-        id: appointment.doctorId,
-        name: appointment.doctorName,
-        specialization: appointment.doctorSpecialization,
-      },
-      chiefComplaints: appointment.chiefComplaint,
-      medicines: appointment.medicine
-        ? [{ name: appointment.medicine, dosage: "As advised", frequency: "As directed", duration: "5 days" }]
-        : [],
-      notes: appointment.doctorNotes || undefined,
-    },
-    hospitalSettings
-  )
+  const printData = convertPrescriptionToPrintData(appointment)
+  generatePrescriptionPDFNew(printData, hospitalSettings)
 }
 
 export function getPrescriptionPDFBuffer(
   appointment: Appointment,
   hospitalSettings?: HospitalPrintSettings
 ): Buffer {
-  const config: StandardDocumentConfig = {
-    docTitle: "Medical Prescription (Rx)",
-    docId: appointment.id || "RX",
-    docDate: new Date().toLocaleDateString("en-IN", { dateStyle: "medium" }),
-    hospitalSettings,
-    infoCards: [
-      {
-        title: "Patient Details",
-        lines: [
-          { label: "Patient Name", value: appointment.patientName, isBold: true },
-        ],
-      },
-    ],
-  }
-  const html = buildStandardDocumentHTML(config)
+  const printData = convertPrescriptionToPrintData(appointment)
+  const html = renderPrescriptionDocumentHTML(printData, hospitalSettings)
   return Buffer.from(html)
 }

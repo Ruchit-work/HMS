@@ -10,7 +10,6 @@ import {
 import { getSettingsHubItems } from "@/features/doctor/nav"
 import {
   BarChart3,
-  CalendarPlus,
   ChevronRight,
   FileText,
   Info,
@@ -21,7 +20,6 @@ import {
 const GROUP_LABELS = {
   account: "Account",
   practice: "Practice tools",
-  scheduling: "Scheduling",
 } as const
 
 const ICONS = {
@@ -29,7 +27,6 @@ const ICONS = {
   about: Info,
   analytics: BarChart3,
   documents: FileText,
-  book: CalendarPlus,
 }
 
 export default function DoctorSettingsPage() {
@@ -41,7 +38,7 @@ export default function DoctorSettingsPage() {
   }
   if (!user) return null
 
-  const groups = (["account", "practice", "scheduling"] as const).map((group) => ({
+  const groups = (["account", "practice"] as const).map((group) => ({
     key: group,
     label: GROUP_LABELS[group],
     items: items.filter((i) => i.group === group),

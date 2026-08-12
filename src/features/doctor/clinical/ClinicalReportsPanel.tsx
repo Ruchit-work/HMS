@@ -216,7 +216,7 @@ export default function ClinicalReportsPanel({
           <ClinicalEmptyState
             compact
             illustration="documents"
-            title="No reports in this category"
+            title="No documents available"
             className="py-6"
           />
         ) : (

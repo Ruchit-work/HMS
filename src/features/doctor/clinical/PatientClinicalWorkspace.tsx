@@ -210,6 +210,11 @@ export default function PatientClinicalWorkspace({
               <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">{appointment.chiefComplaint}</p>
             </ClinicalPanel>
           )}
+          {appointment.assessment?.trim() && (
+            <ClinicalPanel title="Assessment" icon={<FileText className="w-4 h-4" />} className="md:col-span-2 max-h-none [&>div:last-child]:max-h-none">
+              <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">{appointment.assessment}</p>
+            </ClinicalPanel>
+          )}
           <ClinicalPanel title="Visit diagnosis" icon={<Stethoscope className="w-4 h-4" />}>
             {Array.isArray((appointment as Appointment & { finalDiagnosis?: string[] }).finalDiagnosis) &&
             (appointment as Appointment & { finalDiagnosis?: string[] }).finalDiagnosis!.length > 0 ? (
@@ -256,7 +261,7 @@ export default function PatientClinicalWorkspace({
 
       {/* ── Clinical panels grid — visible without deep scrolling ── */}
       <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 min-h-0 [&>*]:min-h-[10rem] [&>*]:max-h-[14rem]">
-        <ClinicalPanel title="Clinical timeline" icon={<History className="w-4 h-4" />} badge={timelineItems.length}>
+        <ClinicalPanel title="History" icon={<History className="w-4 h-4" />} badge={timelineItems.length}>
           <ClinicalTimeline items={timelineItems.slice(0, 5)} emptyMessage="No prior visits recorded." />
         </ClinicalPanel>
 
@@ -305,9 +310,9 @@ export default function PatientClinicalWorkspace({
             appointmentSpecialty={appointment.doctorSpecialization}
             appointmentStatus={appointment.status}
             onDocumentClick={onDocumentClick}
-            canUpload={!isHistoryView && appointment.status === "confirmed"}
-            canEdit={!isHistoryView && appointment.status === "confirmed"}
-            canDelete={!isHistoryView && appointment.status === "confirmed"}
+            canUpload={false}
+            canEdit={false}
+            canDelete={false}
             onlyCurrentAppointment={isHistoryView}
           />
         </ClinicalPanel>

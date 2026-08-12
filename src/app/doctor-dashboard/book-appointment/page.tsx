@@ -1,3 +1,14 @@
 "use client"
 
-export { default } from "@/features/doctor/appointments/screens/DoctorBookAppointmentPage"
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+
+export default function DoctorBookAppointmentRedirectPage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    router.replace("/doctor-dashboard/appointments")
+  }, [router])
+
+  return null
+}

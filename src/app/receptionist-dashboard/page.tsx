@@ -21,7 +21,7 @@ import HospitalBrandHeader from "@/shared/components/HospitalBrandHeader"
 import {
   LayoutDashboard, Users, UserPlus, Stethoscope, CalendarDays, BedDouble,
   ReceiptText, MessageCircle, FolderOpen, CalendarPlus,
-  LogOut, Menu, X, Building2, ChevronDown, ArrowLeft
+  LogOut, Menu, X, ArrowLeft
 } from "lucide-react"
 
 type ActiveTab = ReceptionistTab
@@ -56,7 +56,6 @@ export default function ReceptionistDashboard() {
   const [patientSubTab, setPatientSubTab] = useState<"all" | "analytics">("all")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userName, setUserName] = useState<string>("")
-  const [bookSubOpen, setBookSubOpen] = useState(false)
   const [patientMode, setPatientMode] = useState<"existing" | "new">("existing")
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)

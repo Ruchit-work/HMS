@@ -229,7 +229,7 @@ export default function PatientVisitHistorySection({
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Visit History
               </p>
-              <p className="text-[11px] text-slate-400">Clinical visit timeline</p>
+              <p className="text-[11px] text-slate-400">Clinical visit history</p>
             </div>
           </div>
           <div className="flex gap-2 text-xs">

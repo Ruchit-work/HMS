@@ -52,7 +52,7 @@ export function getSharedDocumentStyles(paperSize: PaperSize = "A4"): string {
   const isThermal = paperSize === "Thermal"
 
   return `
-    :root {
+    .pdf-document-root {
       --bg: #f8fafc;
       --border: #e2e8f0;
       --text: #0f172a;
@@ -60,16 +60,18 @@ export function getSharedDocumentStyles(paperSize: PaperSize = "A4"): string {
       --accent: #0e7490;
       --success-bg: #ecfeff;
       --success-border: #a5f3fc;
-    }
-    * { box-sizing: border-box; }
-    body {
       margin: 0;
       padding: ${isThermal ? "4px" : "16px"};
       background: #eef2f7;
-      color: var(--text);
+      color: #0f172a;
       font-family: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
       font-size: ${isThermal ? "11px" : "13px"};
       line-height: 1.4;
+      box-sizing: border-box;
+      width: 100%;
+    }
+    .pdf-document-root * {
+      box-sizing: border-box;
     }
     .invoice, .document-container {
       width: 100%;
@@ -376,7 +378,8 @@ export interface HeaderProps {
 export function renderDocumentHeader(props: HeaderProps): string {
   const settings = props.hospitalSettings || {}
 
-  const hospitalName = settings.headerTitle || "Medical Center"
+  const rawHospitalName = settings.headerTitle || "Hospital"
+  const hospitalName = rawHospitalName.replace(/\bHospital\s+Hospital\b/gi, "Hospital").trim()
   const hospitalSubtitle = settings.headerSubtitle || "Multi-Specialty Healthcare Services"
   const hospitalAddress = settings.address || ""
   const hospitalPhone = settings.phone || ""
@@ -574,6 +577,7 @@ export function renderAdviceBox(advice?: AdviceBoxProps): string {
 export interface SignatureBoxProps {
   title: string
   name?: string
+  licenseNo?: string
 }
 
 export function renderSignatureBox(sig?: SignatureBoxProps): string {
@@ -583,6 +587,7 @@ export function renderSignatureBox(sig?: SignatureBoxProps): string {
     <section class="signature">
       <div class="signature-box">
         ${sig.name ? `<div>Dr. ${escapeHtml(sig.name)}</div>` : ""}
+        ${sig.licenseNo ? `<div style="font-size: 10px; color: #64748b; font-weight: normal;">Reg / Lic No: ${escapeHtml(sig.licenseNo)}</div>` : ""}
         <div>${escapeHtml(sig.title)}</div>
       </div>
     </section>
@@ -594,7 +599,8 @@ export function renderDocumentFooter(
   footerNote?: string
 ): string {
   const settings = hospitalSettings || {}
-  const hospitalName = settings.headerTitle || "Medical Center"
+  const rawHospitalName = settings.headerTitle || "Hospital"
+  const hospitalName = rawHospitalName.replace(/\bHospital\s+Hospital\b/gi, "Hospital").trim()
   const footerText =
     footerNote ||
     settings.footerText ||

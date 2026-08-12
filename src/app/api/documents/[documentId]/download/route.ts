@@ -82,7 +82,7 @@ export async function GET(
           targetFileRef = f
           break
         }
-      } catch (err) {
+      } catch {
         // Try next bucket candidate
       }
     }

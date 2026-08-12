@@ -27,7 +27,6 @@ export default function HospitalBrandHeader({
   return (
     <div className={`flex items-center gap-2.5 min-w-0 ${className}`}>
       {logoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={logoUrl}
           alt={displayName}

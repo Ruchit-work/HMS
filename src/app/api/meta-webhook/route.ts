@@ -586,7 +586,7 @@ function isHardCancelIntent(text: string): boolean {
 }
 
 /** Exact / phrase match — includes "no" only when not in an active booking session. */
-function isCancelIntent(text: string): boolean {
+function _isCancelIntent(text: string): boolean {
   if (isHardCancelIntent(text)) return true
   const t = text.trim().toLowerCase()
   if (t === "no" || t === "skip") return true
@@ -1282,7 +1282,7 @@ async function handleHelpCenter(phone: string) {
   )
 }
 
-async function handleIncomingText(phone: string) {
+async function _handleIncomingText(phone: string) {
   const buttonResponse = await sendButtonMessage(
     phone,
     "Hi! 👋 Welcome to Harmony Medical Services.\n\nWould you like to book an appointment? Click the button below to get started.",
@@ -3439,7 +3439,7 @@ async function handleRegistrationPrompt(phone: string) {
   }
 
   const { data: currentSession } = await getSession(normalizedPhone)
-  let sessionHospitalId = currentSession?.hospitalId || null
+  const sessionHospitalId = currentSession?.hospitalId || null
 
   let patient = await findPatientByPhone(db, normalizedPhone)
   let patientHospitalId: string | null = sessionHospitalId

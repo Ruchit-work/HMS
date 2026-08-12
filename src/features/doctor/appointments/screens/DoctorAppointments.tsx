@@ -8,8 +8,10 @@ import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { TabSkeleton } from '@/shared/components'
 import { Notification } from '@/shared/components'
 import { generatePrescriptionPDF } from "@/shared/utils/documents/pdfGenerators"
+import { renderPrescriptionDocumentHTML } from "@/shared/utils/documents/documentTemplateEngine"
+import { renderHTMLToPdfDownload } from "@/shared/utils/documents/html2pdfEngine"
 import { usePrint } from "@/shared/hooks/usePrint"
-import { convertPrescriptionToPrintData } from "@/shared/utils/printConverters"
+import { convertPrescriptionToPrintData, isValid6DigitPatientId, fetch6DigitPatientId } from "@/shared/utils/printConverters"
 import { completeAppointment } from "@/shared/utils/appointmentHelpers"
 import { calculateAge } from "@/shared/utils/shared/date"
 import { Appointment as AppointmentType } from "@/types/patient"
@@ -26,6 +28,8 @@ import { parsePrescription as parsePrescriptionUtil } from "@/shared/utils/appoi
 import { formatMedicinesAsText as formatMedicinesAsTextUtil } from "@/shared/utils/appointments/prescriptionFormatters"
 import { TabKey, CompletionFormEntry, hasValidPrescriptionInput, QueueView } from "@/types/appointments"
 import ConsultationModeModal from "@/features/doctor/appointments/modals/ConsultationModeModal"
+import CompletionSuccessModal from "@/features/doctor/appointments/modals/CompletionSuccessModal"
+import PrescriptionDisplay from "@/features/prescription/PrescriptionDisplay"
 import CompletionForm from "@/features/doctor/appointments/forms/CompletionForm"
 import { AdmitDialog } from "@/features/doctor/appointments/modals/AdmitDialog"
 import { ReportModal } from "@/features/doctor/appointments/modals/ReportModal"
@@ -73,6 +77,10 @@ function DoctorAppointmentsContent() {
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const [updating, setUpdating] = useState<{ [key: string]: boolean }>({})
   const [showCompletionForm, setShowCompletionForm] = useState<{ [key: string]: boolean }>({})
+  const [showCompletionSuccessModal, setShowCompletionSuccessModal] = useState(false)
+  const [completedSuccessAppointment, setCompletedSuccessAppointment] = useState<AppointmentType | null>(null)
+  const [showConsultationSummaryModal, setShowConsultationSummaryModal] = useState(false)
+  const [selectedSummaryAppointment, setSelectedSummaryAppointment] = useState<AppointmentType | null>(null)
   const [consultationMode, setConsultationMode] = useState<{ [key: string]: "normal" | "anatomy" | null }>({})
   const [selectedAnatomyTypes, setSelectedAnatomyTypes] = useState<{ [key: string]: ("ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" | "female_reproductive")[] }>({})
   const [activeAnatomyTab, setActiveAnatomyTab] = useState<{ [key: string]: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" | "female_reproductive" }>({})
@@ -963,9 +971,10 @@ function DoctorAppointmentsContent() {
       submissionNotes,
       activeHospitalId,
       [], // diagnosis removed — using doctor's notes only
-      "",
+      formData.customDiagnosis || "",
       user?.uid,
-      "doctor"
+      "doctor",
+      formData.assessment
     )
 
     setAppointments((prevAppointments) =>
@@ -973,6 +982,36 @@ function DoctorAppointmentsContent() {
         apt.id === appointmentId ? { ...apt, ...result.updates } : apt
       )
     )
+
+    let validPid = isValid6DigitPatientId(appointmentSnapshot?.patientId)
+      ? String(appointmentSnapshot?.patientId).trim()
+      : isValid6DigitPatientId((appointmentSnapshot as any)?.patientSequentialId)
+      ? String((appointmentSnapshot as any)?.patientSequentialId).trim()
+      : undefined
+
+    if (!validPid) {
+      const targetUid = appointmentSnapshot?.patientUid || appointmentSnapshot?.patientId
+      const hospId = (appointmentSnapshot as any)?.hospitalId || activeHospitalId
+      if (targetUid) {
+        validPid = await fetch6DigitPatientId(String(targetUid), hospId || undefined)
+      }
+    }
+
+    const completedObj: AppointmentType = {
+      ...(appointmentSnapshot || ({ id: appointmentId } as AppointmentType)),
+      ...result.updates,
+      status: "completed",
+      patientName: appointmentSnapshot?.patientName || "Patient",
+      patientId: validPid || "N/A",
+      patientSequentialId: validPid,
+      patientUid: appointmentSnapshot?.patientUid || appointmentSnapshot?.patientId,
+      doctorName: appointmentSnapshot?.doctorName || (user as any)?.displayName || user?.email || "Attending Doctor",
+      doctorSpecialization: appointmentSnapshot?.doctorSpecialization || "General Medicine",
+      appointmentDate: appointmentSnapshot?.appointmentDate || new Date().toISOString().split("T")[0],
+    } as AppointmentType
+
+    setCompletedSuccessAppointment(completedObj)
+    setShowCompletionSuccessModal(true)
 
     if (appointmentSnapshot) {
       try {
@@ -1207,14 +1246,29 @@ function DoctorAppointmentsContent() {
     }
   }
 
-  const handlePrintPrescriptionDraft = (appointment: AppointmentType) => {
+  const handlePrintPrescriptionDraft = async (appointment: AppointmentType) => {
     const data = completionData[appointment.id]
     if (!data || !hasValidPrescriptionInput(data)) {
       setNotification({ type: "error", message: "Add at least one medicine before printing." })
       return
     }
+    let aptToPrint = appointment
+    if (!isValid6DigitPatientId(appointment.patientId)) {
+      const targetUid = appointment.patientUid || appointment.patientId
+      const hospId = (appointment as any)?.hospitalId || activeHospitalId
+      if (targetUid) {
+        const fetchedId = await fetch6DigitPatientId(String(targetUid), hospId || undefined)
+        if (fetchedId) {
+          aptToPrint = {
+            ...appointment,
+            patientId: fetchedId,
+            patientSequentialId: fetchedId,
+          } as any
+        }
+      }
+    }
     try {
-      printPrescription(convertPrescriptionToPrintData(appointment, data))
+      printPrescription(convertPrescriptionToPrintData(aptToPrint, data))
     } catch {
       setNotification({ type: "error", message: "Failed to open print preview." })
     }
@@ -1484,53 +1538,7 @@ function DoctorAppointmentsContent() {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [expandedAptId, showCompletionForm, completionData])
 
-  useEffect(() => {
-    appointments.forEach((apt) => {
-      const isFormOpen = showCompletionForm[apt.id]
-      const hasSuggestion = !!aiPrescription[apt.id]?.medicine
-      const isLoading = !!loadingAiPrescription[apt.id]
-      const explicitlyHidden = showAiPrescriptionSuggestion[apt.id] === false
 
-      if (isFormOpen && !hasSuggestion && !isLoading && !explicitlyHidden) {
-        setShowAiPrescriptionSuggestion((prev) => ({ ...prev, [apt.id]: true }))
-        handleGenerateAiPrescription(apt.id, true)
-      }
-    })
-  }, [
-    appointments,
-    showCompletionForm,
-    aiPrescription,
-    loadingAiPrescription,
-    showAiPrescriptionSuggestion,
-    handleGenerateAiPrescription,
-  ])
-
-  useEffect(() => {
-    appointments.forEach((apt) => {
-      const isFormOpen = showCompletionForm[apt.id]
-      const hasDiagnosis = !!aiDiagnosis[apt.id]
-      const isLoading = !!loadingAiDiagnosis[apt.id]
-      const explicitlyHidden = showAiDiagnosisSuggestion[apt.id] === false
-
-      if (
-        isFormOpen &&
-        !hasDiagnosis &&
-        !isLoading &&
-        !explicitlyHidden &&
-        apt.chiefComplaint?.trim()
-      ) {
-        setShowAiDiagnosisSuggestion((prev) => ({ ...prev, [apt.id]: true }))
-        getAIDiagnosisSuggestion(apt)
-      }
-    })
-  }, [
-    appointments,
-    showCompletionForm,
-    aiDiagnosis,
-    loadingAiDiagnosis,
-    showAiDiagnosisSuggestion,
-    getAIDiagnosisSuggestion,
-  ])
 
   if (loading) {
     return <TabSkeleton variant="table" />
@@ -1950,10 +1958,11 @@ function DoctorAppointmentsContent() {
                           completionData={
                             completionData[selectedAppointment.id] || {
                               medicines: [],
-                              notes: "",
+                              notes: selectedAppointment.doctorNotes || "",
+                              assessment: selectedAppointment.assessment || "",
                               recheckupRequired: false,
                               finalDiagnosis: [],
-                              customDiagnosis: "",
+                              customDiagnosis: selectedAppointment.customDiagnosis || "",
                             }
                           }
                           patientHistory={patientHistory}
@@ -2267,9 +2276,9 @@ function DoctorAppointmentsContent() {
                 }
                 appointmentSpecialty={documentsModal.appointment.doctorSpecialization}
                 appointmentStatus={documentsModal.appointment.status}
-                canUpload={true}
-                canEdit={true}
-                canDelete={true}
+                canUpload={false}
+                canEdit={false}
+                canDelete={false}
               />
             </ReportViewer>
           </div>
@@ -2457,6 +2466,71 @@ function DoctorAppointmentsContent() {
                   </p>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <CompletionSuccessModal
+        isOpen={showCompletionSuccessModal}
+        onClose={() => setShowCompletionSuccessModal(false)}
+        appointment={completedSuccessAppointment}
+        onGeneratePDF={async () => {
+          if (completedSuccessAppointment) {
+            let aptToPrint = completedSuccessAppointment
+            if (!isValid6DigitPatientId(aptToPrint.patientId)) {
+              const targetUid = aptToPrint.patientUid || aptToPrint.patientId
+              const hospId = (aptToPrint as any)?.hospitalId || activeHospitalId
+              if (targetUid) {
+                const fetchedId = await fetch6DigitPatientId(String(targetUid), hospId || undefined)
+                if (fetchedId) {
+                  aptToPrint = {
+                    ...completedSuccessAppointment,
+                    patientId: fetchedId,
+                    patientSequentialId: fetchedId,
+                  } as any
+                }
+              }
+            }
+            const printData = convertPrescriptionToPrintData(aptToPrint)
+            const html = renderPrescriptionDocumentHTML(printData)
+            const safeName = (aptToPrint.patientName || "Patient").replace(/\s+/g, "_")
+            const safeDate = (aptToPrint.appointmentDate || new Date().toISOString().split("T")[0]).replace(/[\s,/]+/g, "_")
+            await renderHTMLToPdfDownload(html, `Prescription_${safeName}_${safeDate}.pdf`)
+          }
+        }}
+        onViewSummary={() => {
+          if (completedSuccessAppointment) {
+            setSelectedSummaryAppointment(completedSuccessAppointment)
+            setShowConsultationSummaryModal(true)
+          }
+        }}
+      />
+
+      {showConsultationSummaryModal && selectedSummaryAppointment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-lg font-bold text-slate-900">Consultation Summary</h3>
+              <button
+                type="button"
+                onClick={() => setShowConsultationSummaryModal(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <PrescriptionDisplay appointment={selectedSummaryAppointment} variant="modal" showPdfButton />
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConsultationSummaryModal(false)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Close Summary
+              </button>
             </div>
           </div>
         </div>

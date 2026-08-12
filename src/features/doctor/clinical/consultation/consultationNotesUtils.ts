@@ -32,10 +32,15 @@ export function mergeConsultationNotes(clinicalNotes: string, examinationFinding
   return `${clinical}${EXAMINATION_MARKER}${exam}`
 }
 
-/** True when clinical notes or diagnosis field has content. */
+/** True when assessment, diagnosis, notes, or medicines exist. */
 export function hasClinicalDocumentation(entry?: CompletionFormEntry): boolean {
   if (!entry) return false
-  return Boolean((entry.notes || "").trim() || (entry.customDiagnosis || "").trim())
+  return Boolean(
+    (entry.assessment || "").trim() ||
+    (entry.customDiagnosis || "").trim() ||
+    (entry.notes || "").trim() ||
+    (entry.medicines && entry.medicines.some((m) => m.name && m.name.trim()))
+  )
 }
 
 /**

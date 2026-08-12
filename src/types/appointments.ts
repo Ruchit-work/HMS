@@ -15,6 +15,7 @@ export type CompletionFormEntry = {
   recheckupDays?: number
   finalDiagnosis?: string[]
   customDiagnosis?: string
+  assessment?: string
 }
 
 export interface UserData {

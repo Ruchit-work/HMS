@@ -31,7 +31,6 @@ const navIcons: Record<DoctorNavId, React.ReactNode> = {
   home: <Home className="w-5 h-5 shrink-0" />,
   inpatients: <Users className="w-5 h-5 shrink-0" />,
   settings: <Settings className="w-5 h-5 shrink-0" />,
-  book: <Settings className="w-5 h-5 shrink-0" />,
   documents: <Settings className="w-5 h-5 shrink-0" />,
   analytics: <Settings className="w-5 h-5 shrink-0" />,
   profile: <Settings className="w-5 h-5 shrink-0" />,

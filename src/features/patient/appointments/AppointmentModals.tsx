@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { CalendarDays, Check, Clock3, Download, Info, X } from "lucide-react"
 import { Appointment } from "@/types/patient"
@@ -297,8 +297,19 @@ function AppointmentSuccessModalContent({
     return () => clearTimeout(timer)
   }, [requestClose])
 
-  const downloadConfirmationPDF = () => {
-    generateAppointmentConfirmationPDF(appointmentData as unknown as Appointment)
+  const [downloadState, setDownloadState] = useState<"idle" | "generating" | "success">("idle")
+
+  const downloadConfirmationPDF = async () => {
+    if (downloadState === "generating") return
+    setDownloadState("generating")
+    try {
+      await generateAppointmentConfirmationPDF(appointmentData as unknown as Appointment)
+      setDownloadState("success")
+      setTimeout(() => setDownloadState("idle"), 2500)
+    } catch (err) {
+      console.error("PDF download failed:", err)
+      setDownloadState("idle")
+    }
   }
 
   const isPendingPayment =
@@ -533,11 +544,29 @@ function AppointmentSuccessModalContent({
               variant="primary"
               size="lg"
               onClick={downloadConfirmationPDF}
-              className="h-11 w-full shadow-sm transition-shadow hover:shadow-md sm:flex-1"
+              disabled={downloadState === "generating"}
+              className="h-11 w-full shadow-sm transition-shadow hover:shadow-md sm:flex-1 min-w-[150px] whitespace-nowrap shrink-0 justify-center"
               aria-label="Download appointment confirmation PDF"
             >
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Download PDF
+              {downloadState === "generating" ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin text-white shrink-0" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span>Generating PDF...</span>
+                </>
+              ) : downloadState === "success" ? (
+                <>
+                  <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>Downloaded ✓</span>
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>Download PDF</span>
+                </>
+              )}
             </Button>
             <Button
               type="button"

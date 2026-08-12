@@ -125,6 +125,8 @@ export interface PrintPrescriptionItem {
 export interface PrintPrescriptionData {
   prescriptionId?: string
   date: string
+  hospitalName?: string
+  hospitalId?: string
   patient: PrintPatientInfo
   doctor: PrintDoctorInfo
   vitals?: {
@@ -138,9 +140,13 @@ export interface PrintPrescriptionData {
   }
   chiefComplaints?: string
   medicalHistory?: string
+  assessment?: string
+  examinationFindings?: string
   diagnosis?: string[] | string
+  investigations?: string
   medicines: PrintPrescriptionItem[]
   notes?: string
+  advice?: string
   recheckupDate?: string
   recheckupNote?: string
 }

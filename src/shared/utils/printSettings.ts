@@ -2,12 +2,12 @@ import { HospitalPrintSettings } from "@/types/print"
 
 export const DEFAULT_HOSPITAL_PRINT_SETTINGS: HospitalPrintSettings = {
   logoUrl: "",
-  headerTitle: "HARMONY HEALTHCARE",
+  headerTitle: "",
   headerSubtitle: "Multi-Specialty Hospital & Research Center",
-  footerText: "Thank you for choosing Harmony Healthcare. Wishing you good health!",
-  phone: "+91 98765 43210",
-  email: "care@harmonyhealth.com",
-  address: "123 Healthcare Boulevard, Medical District",
+  footerText: "Computer generated document. All rights reserved.",
+  phone: "Contact Reception",
+  email: "info@hospital.com",
+  address: "Hospital Address",
   paperSize: "A4",
   autoPrintBooking: false,
   autoPrintPayment: false,
@@ -22,7 +22,7 @@ export function normalizeHospitalPrintSettings(rawSettings?: any): HospitalPrint
 
   return {
     logoUrl: typeof rawSettings.logoUrl === "string" ? rawSettings.logoUrl.trim() : DEFAULT_HOSPITAL_PRINT_SETTINGS.logoUrl,
-    headerTitle: typeof rawSettings.headerTitle === "string" && rawSettings.headerTitle.trim() ? rawSettings.headerTitle.trim() : DEFAULT_HOSPITAL_PRINT_SETTINGS.headerTitle,
+    headerTitle: typeof rawSettings.headerTitle === "string" && rawSettings.headerTitle.trim() ? rawSettings.headerTitle.trim() : "",
     headerSubtitle: typeof rawSettings.headerSubtitle === "string" ? rawSettings.headerSubtitle.trim() : DEFAULT_HOSPITAL_PRINT_SETTINGS.headerSubtitle,
     footerText: typeof rawSettings.footerText === "string" ? rawSettings.footerText.trim() : DEFAULT_HOSPITAL_PRINT_SETTINGS.footerText,
     phone: typeof rawSettings.phone === "string" ? rawSettings.phone.trim() : DEFAULT_HOSPITAL_PRINT_SETTINGS.phone,

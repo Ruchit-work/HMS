@@ -49,21 +49,24 @@ export function PrintProvider({ children }: { children: ReactNode }) {
 
   // Combine Active Logged-In Hospital Profile & Custom Print Settings dynamically
   const hospitalBranding: HospitalPrintSettings = useMemo(() => {
-    const defaultName = activeHospital?.name || "Medical Center"
+    const realHospitalName = activeHospital?.name || customPrintSettings?.headerTitle || "Hospital"
     const defaultSubtitle = activeHospital?.code
       ? `Hospital Code: ${activeHospital.code}`
       : "Multi-Specialty Healthcare Services"
 
+    const rawHeaderTitle = activeHospital?.name || (customPrintSettings?.headerTitle && customPrintSettings.headerTitle !== "HARMONY HEALTHCARE" ? customPrintSettings.headerTitle : realHospitalName)
+    const headerTitle = rawHeaderTitle.replace(/\bHospital\s+Hospital\b/gi, "Hospital").trim()
+
     return {
-      headerTitle: customPrintSettings?.headerTitle || defaultName,
+      headerTitle,
       headerSubtitle: customPrintSettings?.headerSubtitle || defaultSubtitle,
-      logoUrl: customPrintSettings?.logoUrl || undefined,
+      logoUrl: customPrintSettings?.logoUrl || (activeHospital as any)?.logoUrl || undefined,
       phone: customPrintSettings?.phone || activeHospital?.phone || "Contact Reception",
       email: customPrintSettings?.email || activeHospital?.email || "info@hospital.com",
       address: customPrintSettings?.address || activeHospital?.address || "Hospital Address",
       footerText:
         customPrintSettings?.footerText ||
-        `Computer generated document. Issued by ${defaultName}. All rights reserved.`,
+        `Computer generated document. Issued by ${headerTitle}. All rights reserved.`,
       paperSize: customPrintSettings?.paperSize || "A4",
       taxRegistrationNo: customPrintSettings?.taxRegistrationNo || undefined,
     }

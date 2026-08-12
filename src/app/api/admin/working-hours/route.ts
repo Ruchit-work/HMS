@@ -8,7 +8,7 @@ import {
 } from "@/shared/utils/firebase/serverHospitalQueries"
 import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
 import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
-import type { BranchTimings, DayTiming } from "@/types/branch"
+import type { BranchTimings } from "@/types/branch"
 
 const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const
 

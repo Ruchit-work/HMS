@@ -14,6 +14,8 @@ export interface Html2PdfOptions {
     letterRendering?: boolean
     scrollX?: number
     scrollY?: number
+    windowWidth?: number
+    windowHeight?: number
   }
   jsPDF?: {
     unit?: string
@@ -27,6 +29,45 @@ export interface Html2PdfOptions {
     before?: string | string[]
     after?: string | string[]
   }
+}
+
+/**
+ * Audit helper to inspect and log the visible application's computed styles
+ * before, during, and after PDF generation.
+ */
+export function inspectAppComputedStyles(stage: string) {
+  if (typeof window === "undefined" || typeof document === "undefined") return
+  const bodyStyle = window.getComputedStyle(document.body)
+  const rootStyle = window.getComputedStyle(document.documentElement)
+  const mainEl = document.querySelector("main") || document.body
+  const mainStyle = window.getComputedStyle(mainEl)
+
+  console.log(`[PDF Audit Stage: ${stage}]`, {
+    body: {
+      width: bodyStyle.width,
+      height: bodyStyle.height,
+      minHeight: bodyStyle.minHeight,
+      maxHeight: bodyStyle.maxHeight,
+      display: bodyStyle.display,
+      position: bodyStyle.position,
+      overflow: bodyStyle.overflow,
+      zoom: (bodyStyle as any).zoom || "1",
+      transform: bodyStyle.transform,
+    },
+    root: {
+      width: rootStyle.width,
+      height: rootStyle.height,
+      overflow: rootStyle.overflow,
+    },
+    mainLayout: {
+      width: mainStyle.width,
+      height: mainStyle.height,
+      display: mainStyle.display,
+      gridTemplateColumns: mainStyle.gridTemplateColumns,
+      gridTemplateRows: mainStyle.gridTemplateRows,
+      flexDirection: mainStyle.flexDirection,
+    },
+  })
 }
 
 /**
@@ -65,6 +106,8 @@ export function getDefaultHtml2PdfOptions(filename = "document.pdf"): Html2PdfOp
       letterRendering: true,
       scrollX: 0,
       scrollY: 0,
+      windowWidth: 800,
+      windowHeight: 1120,
     },
     jsPDF: {
       unit: "mm",
@@ -91,22 +134,31 @@ export async function prepareContainerAndAssets(
     throw new Error("DOM preparation is only supported in browser environments")
   }
 
+  console.log("[PDF Step 2] PDF container creation started")
+  inspectAppComputedStyles("2. PDF Container Creation - Before DOM Append")
+
   const wrapper = document.createElement("div")
   wrapper.style.position = "fixed"
-  wrapper.style.left = "-100000px"
+  wrapper.style.left = "-10000px"
   wrapper.style.top = "0"
   wrapper.style.width = targetWidth
+  wrapper.style.height = "auto"
   wrapper.style.background = "#ffffff"
   wrapper.style.zIndex = "-9999"
+  wrapper.style.visibility = "visible"
+  wrapper.style.pointerEvents = "none"
+  wrapper.style.overflow = "hidden"
   wrapper.innerHTML = html
+
   document.body.appendChild(wrapper)
+
+  inspectAppComputedStyles("2. PDF Container Creation - After DOM Append")
 
   const element = (wrapper.querySelector("#doc-root") ||
     wrapper.querySelector("#bill-root") ||
     wrapper.firstElementChild ||
     wrapper) as HTMLElement
 
-  // 1. Synchronize font rendering if document.fonts is supported
   if ("fonts" in document && document.fonts?.ready) {
     try {
       await document.fonts.ready
@@ -115,7 +167,6 @@ export async function prepareContainerAndAssets(
     }
   }
 
-  // 2. Synchronize image loading & decoding for all <img> elements
   const images = Array.from(wrapper.querySelectorAll("img"))
   if (images.length > 0) {
     await Promise.all(
@@ -148,16 +199,13 @@ export async function prepareContainerAndAssets(
                   clearTimeout(timer)
                   done()
                 })
-                .catch(() => {
-                  // Fall back to event listeners
-                })
+                .catch(() => {})
             }
           })
       )
     )
   }
 
-  // 3. Wait for layout reflow & paint cycle using double requestAnimationFrame
   await new Promise<void>((resolve) => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -187,13 +235,46 @@ export async function renderHTMLToPdfBlob(
   const { wrapper, element } = await prepareContainerAndAssets(html)
 
   try {
+    console.log("[PDF Step 3] PDF rendering start")
+    inspectAppComputedStyles("3. PDF Rendering Start")
+
     const pdfBlob = (await html2pdf().set(opts).from(element).outputPdf("blob")) as Blob
+
+    console.log("[PDF Step 4] PDF rendering completion")
+    inspectAppComputedStyles("4. PDF Rendering Completion")
+
+    console.log("[PDF Step 5] Blob creation:", { size: pdfBlob.size, type: pdfBlob.type })
     return pdfBlob
   } finally {
     if (document.body.contains(wrapper)) {
       document.body.removeChild(wrapper)
+      console.log("[PDF Step 8] PDF container cleanup: wrapper unmounted from document.body")
+      inspectAppComputedStyles("8. PDF Container Cleanup - After Unmount")
     }
   }
+}
+
+/**
+ * Standard Central HMS PDF Download Utility
+ * Receives a PDF Blob and triggers a direct background file download via hidden <a> element.
+ */
+export function downloadPdfBlob(blob: Blob, filename = "document.pdf"): void {
+  if (typeof window === "undefined") return
+
+  console.log("[PDF Step 6 & 7] Blob URL & Direct Background Download", { filename, size: blob.size })
+  const blobUrl = URL.createObjectURL(blob)
+
+  const link = document.createElement("a")
+  link.style.display = "none"
+  link.href = blobUrl
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+
+  setTimeout(() => {
+    URL.revokeObjectURL(blobUrl)
+  }, 10000)
 }
 
 /**
@@ -206,23 +287,30 @@ export async function renderHTMLToPdfDownload(
 ): Promise<void> {
   if (typeof window === "undefined") return
 
-  const html2pdf = await getHtml2Pdf()
-  if (!html2pdf) throw new Error("html2pdf.js library is unavailable")
-
   const opts = { ...getDefaultHtml2PdfOptions(filename), ...options }
-  const { wrapper, element } = await prepareContainerAndAssets(html)
 
   try {
-    await html2pdf().set(opts).from(element).save()
-  } finally {
-    if (document.body.contains(wrapper)) {
-      document.body.removeChild(wrapper)
+    const blob = await renderHTMLToPdfBlob(html, opts)
+    downloadPdfBlob(blob, filename)
+  } catch (err) {
+    console.error("PDF download error:", err)
+    const html2pdf = await getHtml2Pdf()
+    if (!html2pdf) throw new Error("html2pdf.js library is unavailable")
+    const { wrapper, element } = await prepareContainerAndAssets(html)
+    try {
+      await html2pdf().set(opts).from(element).save()
+    } finally {
+      if (document.body.contains(wrapper)) {
+        document.body.removeChild(wrapper)
+        console.log("[PDF Step 8] PDF container cleanup (fallback)")
+        inspectAppComputedStyles("8. PDF Container Cleanup Fallback")
+      }
     }
   }
 }
 
 /**
- * Renders HTML string to PDF and opens in a new tab (or downloads if popup blocked)
+ * Renders HTML string to PDF and triggers direct background file download (preserves screen UI)
  */
 export async function renderHTMLToPdfOpen(
   html: string,
@@ -230,18 +318,5 @@ export async function renderHTMLToPdfOpen(
   options?: Html2PdfOptions
 ): Promise<void> {
   if (typeof window === "undefined") return
-
-  const opts = { ...getDefaultHtml2PdfOptions(filename), ...options }
-
-  try {
-    const blob = await renderHTMLToPdfBlob(html, opts)
-    const blobUrl = URL.createObjectURL(blob)
-    const win = window.open(blobUrl, "_blank")
-    if (!win) {
-      await renderHTMLToPdfDownload(html, filename, opts)
-    }
-  } catch (err) {
-    console.error("PDF opening failed, falling back to download:", err)
-    await renderHTMLToPdfDownload(html, filename, opts)
-  }
+  await renderHTMLToPdfDownload(html, filename, options)
 }

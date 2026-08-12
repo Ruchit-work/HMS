@@ -400,7 +400,7 @@ function TenantDetailDrawer({
   onUpgrade,
   onRenew,
   onSuspend,
-  onDelete,
+  onDelete: _onDelete,
   onAnalytics,
 }: {
   tenant: TenantView | null

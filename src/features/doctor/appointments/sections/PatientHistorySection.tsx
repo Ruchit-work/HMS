@@ -96,12 +96,13 @@ export default function PatientHistorySection({
                     <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-800">
                       Visit #{visitNumberFinal}
                     </span>
-                    <span className="text-[11px] text-slate-500">
-                      {new Date(historyItem.appointmentDate).toLocaleDateString("en-US", {
-                        month: "short",
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      {new Date(historyItem.appointmentDate).toLocaleDateString("en-GB", {
                         day: "numeric",
+                        month: "short",
                         year: "numeric",
                       })}
+                      {historyItem.appointmentTime ? ` • ${historyItem.appointmentTime}` : ""}
                     </span>
                   </div>
                   {historyItem.doctorName && (
@@ -123,6 +124,17 @@ export default function PatientHistorySection({
                     </p>
                     <p className="mt-0.5 text-slate-900 line-clamp-2">
                       {historyItem.chiefComplaint}
+                    </p>
+                  </div>
+                )}
+
+                {historyItem.assessment && (
+                  <div className="rounded-lg bg-slate-50 px-2.5 py-1.5 border border-slate-100">
+                    <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">
+                      Assessment
+                    </p>
+                    <p className="mt-0.5 text-slate-900 line-clamp-2">
+                      {historyItem.assessment}
                     </p>
                   </div>
                 )}
@@ -195,6 +207,15 @@ export default function PatientHistorySection({
                       </div>
                     )
                   })()}
+
+                {historyItem.assessment && (
+                  <div>
+                    <p className="font-medium uppercase tracking-wide text-slate-500">Assessment</p>
+                    <p className="mt-1 text-xs text-slate-800 whitespace-pre-line">
+                      {historyItem.assessment}
+                    </p>
+                  </div>
+                )}
 
                 {historyItem.doctorNotes && (
                   <div>

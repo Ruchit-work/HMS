@@ -152,7 +152,6 @@ function ImageDropzone({
       >
         {value ? (
           <div className="flex flex-col items-center gap-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={value} alt={label} className="h-14 max-w-[180px] object-contain rounded-lg border border-slate-200 bg-white p-1.5 shadow-2xs" />
             <div className="flex items-center gap-2 mt-1" onClick={(e) => e.stopPropagation()}>
               <button
@@ -261,7 +260,7 @@ export default function GeneralSettings({
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [data, setData] = useState<GeneralSettingsData | null>(null)
+  const [, setData] = useState<GeneralSettingsData | null>(null)
 
   // Form State
   const [name, setName] = useState("")
@@ -698,7 +697,6 @@ export default function GeneralSettings({
               <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Header Branding Mockup</span>
               <div className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg border border-slate-200">
                 {logo ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={logo}
                     alt="Logo Preview"
@@ -723,7 +721,6 @@ export default function GeneralSettings({
               <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Dark Sidebar Mockup</span>
               <div className="flex items-center gap-3 p-2 bg-slate-800/80 rounded-lg border border-slate-700">
                 {logo ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={logo}
                     alt="Sidebar Logo Preview"

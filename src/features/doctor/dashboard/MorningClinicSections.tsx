@@ -277,7 +277,7 @@ export function TodayScheduleTimeline({
       {appointments.length === 0 ? (
         <div className="py-12 text-center px-4">
           <p className="text-sm font-medium text-slate-600">No confirmed visits today</p>
-          <p className="text-xs text-slate-500 mt-1">Book a walk-in or check tomorrow&apos;s queue.</p>
+          <p className="text-xs text-slate-500 mt-1">Check tomorrow&apos;s queue or refresh.</p>
         </div>
       ) : (
         <div className="p-4 space-y-2 max-h-[22rem] overflow-y-auto">

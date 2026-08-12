@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { DocumentMetadata } from "@/types/document"
 import { auth } from "@/firebase/config"
-import { detectCriticalFindings, formatReportDate, getReportDoctor } from "@/shared/utils/clinicalReportUtils"
+import { detectCriticalFindings, getReportDoctor } from "@/shared/utils/clinicalReportUtils"
 
 interface DocumentViewerProps {
   document: DocumentMetadata
@@ -17,7 +17,7 @@ export default function DocumentViewer({
   document,
   onClose,
   onDelete,
-  canEdit = false,
+  canEdit: _canEdit = false,
   canDelete = false,
 }: DocumentViewerProps) {
   const isImage = document.mimeType?.startsWith("image/") || false
@@ -30,7 +30,7 @@ export default function DocumentViewer({
   // Zoom & Rotation controls for image canvas
   const [zoom, setZoom] = useState(1.0)
   const [rotation, setRotation] = useState(0)
-  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [_isFullscreen, setIsFullscreen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const fetchDownloadUrl = useCallback(async () => {

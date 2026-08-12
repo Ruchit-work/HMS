@@ -9,6 +9,7 @@ import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
 import { logApiError, createErrorResponse } from "@/shared/utils/errors/errorLogger"
 import { getString, isRecord, type UnknownRecord } from "@/shared/utils/api/validation"
 import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
+import { isValid6DigitPatientId } from "@/shared/utils/printConverters"
 
 const sendDoctorBookingWhatsApp = async (
   appointmentData: UnknownRecord,
@@ -245,10 +246,24 @@ export async function POST(request: Request) {
       }
     }
 
+    const patientUidForLookup = String(appointmentData.patientUid || appointmentData.patientId || "")
+    let resolved6DigitPid = isValid6DigitPatientId(String(appointmentData.patientId)) ? String(appointmentData.patientId) : null
+    if (!resolved6DigitPid && patientUidForLookup) {
+      try {
+        const pSnap = await admin.firestore().collection("patients").doc(patientUidForLookup).get()
+        if (pSnap.exists) {
+          const pData = pSnap.data() || {}
+          if (pData.patientId && isValid6DigitPatientId(pData.patientId)) {
+            resolved6DigitPid = String(pData.patientId).trim()
+          }
+        }
+      } catch {}
+    }
+
     const docData: Record<string, unknown> = {
-      patientId: String(appointmentData.patientId),
-      // Mirror auth UID so Visit History / patient dashboard queries by patientUid also match.
-      patientUid: String(appointmentData.patientUid || appointmentData.patientId),
+      patientId: resolved6DigitPid || String(appointmentData.patientId),
+      patientSequentialId: resolved6DigitPid || null,
+      patientUid: patientUidForLookup,
       patientName: String(appointmentData.patientName),
       patientEmail: safeValue(appointmentData.patientEmail, ""),
       patientPhone: safeValue(appointmentData.patientPhone, ""),

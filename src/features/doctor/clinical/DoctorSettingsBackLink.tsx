@@ -13,7 +13,6 @@ export default function DoctorSettingsBackLink() {
     "/doctor-dashboard/about",
     "/doctor-dashboard/analytics",
     "/doctor-dashboard/documents",
-    "/doctor-dashboard/book-appointment",
   ]
 
   if (!secondaryRoutes.some((r) => pathname.startsWith(r))) return null

@@ -130,6 +130,7 @@ export interface Appointment {
   updatedAt: string
   medicine?: string
   doctorNotes?: string
+  assessment?: string
   // Final Diagnosis (doctor-confirmed)
   finalDiagnosis?: string[] // Array of diagnosis codes/names
   customDiagnosis?: string // Custom diagnosis text if "Other" is selected

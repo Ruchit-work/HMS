@@ -1,7 +1,10 @@
 "use client"
 
+import { useState } from "react"
 import { Appointment } from "@/types/patient"
-import { generatePrescriptionPDF } from "@/shared/utils/documents/pdfGenerators"
+import { convertPrescriptionToPrintData, isValid6DigitPatientId, fetch6DigitPatientId } from "@/shared/utils/printConverters"
+import { renderPrescriptionDocumentHTML } from "@/shared/utils/documents/documentTemplateEngine"
+import { renderHTMLToPdfDownload, inspectAppComputedStyles } from "@/shared/utils/documents/html2pdfEngine"
 import { Button } from '@/shared/components'
 
 // Helper function to parse prescription text
@@ -112,18 +115,69 @@ export default function PrescriptionDisplay({
   variant = "default",
   onPdfClick
 }: PrescriptionDisplayProps) {
+  const [downloadState, setDownloadState] = useState<"idle" | "generating" | "success">("idle")
+  const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+
   // Only show for completed appointments with medicine or notes
   if (appointment.status !== "completed" || (!appointment.medicine && !appointment.doctorNotes)) {
     return null
   }
 
-  const handlePdfClick = (e?: React.MouseEvent) => {
+  const handlePdfClick = async (e?: React.MouseEvent) => {
     if (onPdfClick) {
       onPdfClick(e)
     } else if (e) {
       e.stopPropagation()
     }
-    generatePrescriptionPDF(appointment)
+
+    if (downloadState === "generating") return
+    console.log("[PDF Step 1] Download button clicked")
+    inspectAppComputedStyles("1. Download Button Clicked")
+
+    setDownloadState("generating")
+    setToastMessage(null)
+
+    try {
+      let aptToPrint = appointment
+      if (!isValid6DigitPatientId(appointment.patientId)) {
+        const targetUid = appointment.patientUid || appointment.patientId
+        const hospId = (appointment as any)?.hospitalId
+        if (targetUid) {
+          const fetchedId = await fetch6DigitPatientId(String(targetUid), hospId || undefined)
+          if (fetchedId) {
+            aptToPrint = {
+              ...appointment,
+              patientId: fetchedId,
+              patientSequentialId: fetchedId,
+            } as any
+          }
+        }
+      }
+
+      const printData = convertPrescriptionToPrintData(aptToPrint)
+      const html = renderPrescriptionDocumentHTML(printData)
+      const safeName = (aptToPrint.patientName || "Patient").replace(/\s+/g, "_")
+      const safeDate = (aptToPrint.appointmentDate || new Date().toISOString().split("T")[0]).replace(/[\s,/]+/g, "_")
+
+      await renderHTMLToPdfDownload(html, `Prescription_${safeName}_${safeDate}.pdf`)
+
+      setDownloadState("success")
+      setToastMessage({ type: "success", text: "PDF downloaded successfully" })
+
+      setTimeout(() => {
+        setDownloadState("idle")
+      }, 2500)
+      setTimeout(() => {
+        setToastMessage(null)
+      }, 4000)
+    } catch (err) {
+      console.error("PDF download failed:", err)
+      setDownloadState("idle")
+      setToastMessage({ type: "error", text: "Failed to download PDF. Please try again." })
+      setTimeout(() => {
+        setToastMessage(null)
+      }, 4000)
+    }
   }
 
   const containerClass = variant === "modal" 
@@ -142,11 +196,38 @@ export default function PrescriptionDisplay({
           <span>Prescription & Doctor&apos;s Notes</span>
         </h4>
         {showPdfButton && (
-          <Button size="sm" variant="outline" onClick={handlePdfClick}>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Download PDF
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handlePdfClick}
+            disabled={downloadState === "generating"}
+            className={`whitespace-nowrap shrink-0 justify-center min-w-[145px] ${
+              downloadState === "success" ? "text-emerald-700 border-emerald-300 bg-emerald-50" : ""
+            }`}
+          >
+            {downloadState === "generating" ? (
+              <>
+                <svg className="w-4 h-4 animate-spin text-cyan-600 shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span>Generating PDF...</span>
+              </>
+            ) : downloadState === "success" ? (
+              <>
+                <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Downloaded ✓</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Download PDF</span>
+              </>
+            )}
           </Button>
         )}
       </div>
@@ -264,6 +345,16 @@ export default function PrescriptionDisplay({
           </div>
         )}
       </div>
+      {toastMessage && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-medium shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+          {toastMessage.type === "success" ? (
+            <span className="text-emerald-400 font-bold text-sm">✓</span>
+          ) : (
+            <span className="text-rose-400 font-bold text-sm">✕</span>
+          )}
+          <span>{toastMessage.text}</span>
+        </div>
+      )}
     </div>
   )
 }

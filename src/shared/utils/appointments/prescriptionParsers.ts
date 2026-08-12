@@ -173,21 +173,143 @@ export const parseAiPrescription = (text: string): Array<{name: string, dosage: 
   }
   
   // Add last medicine if exists
-  if (currentMedicine && currentMedicine.name) {
+  if (currentMedicine && currentMedicine.name && !isNonMedicineText(currentMedicine.name)) {
     medicines.push(currentMedicine)
   }
   
-  // If parsing failed, create one medicine entry with the name from text
-  if (medicines.length === 0 && text.trim()) {
-    const firstLine = text.split('\n')[0].trim()
-    medicines.push({
-      name: firstLine || "Medicine",
-      dosage: "",
-      frequency: "",
-      duration: ""
-    })
-  }
-  
-  return medicines
+  return medicines.filter((m) => m.name && !isNonMedicineText(m.name))
 }
+
+export function isNonMedicineText(text: string): boolean {
+  if (!text || !text.trim()) return true
+  const lower = text.trim().toLowerCase()
+  if (
+    lower.startsWith("diagnosis:") ||
+    lower.startsWith("assessment:") ||
+    lower.startsWith("advice:") ||
+    lower.startsWith("instructions:") ||
+    lower.startsWith("investigations:") ||
+    lower.startsWith("chief complaint:") ||
+    lower.startsWith("history:") ||
+    lower.startsWith("impression:") ||
+    lower.startsWith("treatment:") ||
+    lower.startsWith("recommendation:") ||
+    lower.startsWith("plan:") ||
+    lower.startsWith("follow-up:") ||
+    lower.startsWith("re-checkup:") ||
+    lower.includes("prescription") ||
+    lower.includes("consultation summary")
+  ) {
+    return true
+  }
+  if (text.length > 120) return true
+  if (text.split(".").filter(Boolean).length > 2) return true
+  return false
+}
+
+export function cleanMedicineName(name: string): string {
+  if (!name) return ""
+  return name
+    .replace(/^[*#🧾📌•\-\d.\s]+/g, "")
+    .replace(/\[.*?\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+export interface StructuredMedicineItem {
+  name: string
+  dosage: string
+  frequency: string
+  duration: string
+  instructions?: string
+}
+
+export function extractStructuredMedicines(
+  apt?: { medicine?: string; [key: string]: any } | null,
+  formMedicines?: Array<{ name: string; dosage?: string; frequency?: string; duration?: string; instructions?: string }> | null
+): StructuredMedicineItem[] {
+  if (Array.isArray(formMedicines) && formMedicines.length > 0) {
+    const valid = formMedicines
+      .filter((m) => m && m.name && m.name.trim() && !isNonMedicineText(m.name))
+      .map((m) => ({
+        name: cleanMedicineName(m.name),
+        dosage: m.dosage?.trim() || "As advised",
+        frequency: m.frequency?.trim() || "As directed",
+        duration: m.duration?.trim() || "Standard",
+        instructions: m.instructions?.trim() || "—",
+      }))
+    if (valid.length > 0) return valid
+  }
+
+  const text = apt?.medicine
+  if (!text || !text.trim()) return []
+
+  const trimmed = text.trim()
+
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) {
+        const valid = parsed
+          .filter((m) => m && (m.name || m.medicineName) && !isNonMedicineText(m.name || m.medicineName))
+          .map((m) => ({
+            name: cleanMedicineName(m.name || m.medicineName),
+            dosage: m.dosage?.trim() || m.dose?.trim() || "As advised",
+            frequency: m.frequency?.trim() || "As directed",
+            duration: m.duration?.trim() || "Standard",
+            instructions: m.instructions?.trim() || "—",
+          }))
+        if (valid.length > 0) return valid
+      }
+    } catch {
+      // not json
+    }
+  }
+
+  const parsed = parsePrescription(trimmed)
+  if (parsed && parsed.medicines && parsed.medicines.length > 0) {
+    const valid = parsed.medicines
+      .filter((m) => m.name && m.name.trim() && !isNonMedicineText(m.name))
+      .map((m) => ({
+        name: cleanMedicineName(m.name),
+        dosage: m.dosage?.trim() || "As advised",
+        frequency: m.frequency?.trim() || "As directed",
+        duration: m.duration?.trim() || "Standard",
+        instructions: "—",
+      }))
+    if (valid.length > 0) return valid
+  }
+
+  const aiParsed = parseAiPrescription(trimmed)
+  if (aiParsed && aiParsed.length > 0) {
+    const valid = aiParsed
+      .filter((m) => m.name && m.name.trim() && !isNonMedicineText(m.name))
+      .map((m) => ({
+        name: cleanMedicineName(m.name),
+        dosage: m.dosage?.trim() || "As advised",
+        frequency: m.frequency?.trim() || "As directed",
+        duration: m.duration?.trim() || "Standard",
+        instructions: "—",
+      }))
+    if (valid.length > 0) return valid
+  }
+
+  const lines = trimmed
+    .split("\n")
+    .map((l) => l.replace(/[*#🧾📌]/g, "").trim())
+    .filter((l) => l.length > 0 && !isNonMedicineText(l))
+
+  if (lines.length > 0) {
+    return lines.map((line) => ({
+      name: cleanMedicineName(line),
+      dosage: "As advised",
+      frequency: "As directed",
+      duration: "Standard",
+      instructions: "—",
+    }))
+  }
+
+  return []
+}
+
 

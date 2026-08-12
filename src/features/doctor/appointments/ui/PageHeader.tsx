@@ -1,7 +1,6 @@
 "use client"
 
 import React from "react"
-import Link from "next/link"
 import ClinicalPageHeader from "@/features/doctor/clinical/ClinicalPageHeader"
 import { Button } from '@/shared/components'
 import { FileDown, RefreshCw, Stethoscope } from "lucide-react"
@@ -21,7 +20,7 @@ export default function PageHeader({
   return (
     <ClinicalPageHeader
       title="Today's consultations"
-      subtitle="Review your queue, open the next patient, and complete visits. Scheduling is usually handled by reception."
+      subtitle="Review your queue, open the next patient, and complete visits."
       icon={<Stethoscope className="w-5 h-5" />}
       actions={
         <>
@@ -41,12 +40,6 @@ export default function PageHeader({
             <RefreshCw className="w-4 h-4" />
             Refresh
           </Button>
-          <Link
-            href="/doctor-dashboard/settings"
-            className="hidden sm:inline text-xs font-medium text-slate-500 hover:text-slate-700 hover:underline px-1"
-          >
-            Scheduling (Settings)
-          </Link>
         </>
       }
     />

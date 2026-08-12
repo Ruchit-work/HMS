@@ -82,15 +82,16 @@ export const completeAppointment = async (
   finalDiagnosis?: string[],
   customDiagnosis?: string,
   updatedBy?: string,
-  updatedByRole: "doctor" | "admin" = "doctor"
+  updatedByRole: "doctor" | "admin" = "doctor",
+  assessment?: string
 ) => {
   if (!hospitalId) {
     throw new Error("Hospital ID is required")
   }
 
-  // Require doctor notes (diagnosis field removed in favor of notes-only)
-  if (!notes || !String(notes).trim()) {
-    throw new Error("Doctor's notes are required to complete the consultation")
+  // Require doctor notes (or assessment/diagnosis)
+  if ((!notes || !String(notes).trim()) && (!assessment || !String(assessment).trim()) && (!customDiagnosis || !String(customDiagnosis).trim())) {
+    throw new Error("Clinical documentation is required to complete the consultation")
   }
 
   // Load appointment to validate rules - use hospital-scoped collection
@@ -152,6 +153,9 @@ export const completeAppointment = async (
     completedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }
+  if (assessment?.trim()) {
+    updateData.assessment = assessment.trim()
+  }
   if (finalDiagnosis && finalDiagnosis.length > 0) {
     updateData.finalDiagnosis = finalDiagnosis
   }
@@ -172,6 +176,7 @@ export const completeAppointment = async (
       status: "completed" as const,
       medicine: medicine,
       doctorNotes: notes,
+      assessment: assessment?.trim() || apt.assessment || "",
       finalDiagnosis: finalDiagnosis,
       customDiagnosis: customDiagnosis
     }

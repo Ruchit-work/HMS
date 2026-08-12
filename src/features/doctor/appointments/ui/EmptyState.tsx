@@ -39,11 +39,6 @@ export default function EmptyState({ activeTab }: EmptyStateProps) {
       illustration="appointments"
       title={message.title}
       description={message.description}
-      action={
-        activeTab === "today"
-          ? { label: "Need to schedule? Ask reception", href: "/doctor-dashboard/settings" }
-          : undefined
-      }
     />
   )
 }
