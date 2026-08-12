@@ -1,11 +1,13 @@
 "use client"
 
 import React from "react"
+import { FolderOpen } from "lucide-react"
 import ClinicalStatusBadge from "./ClinicalStatusBadge"
 import PatientAvatar from "./PatientAvatar"
 
 interface PatientSummaryCardProps {
   patientName: string
+  patientId?: string | null
   age?: number | null
   phone?: string | null
   status?: string
@@ -20,10 +22,12 @@ interface PatientSummaryCardProps {
   vitals?: Array<{ label: string; value: string }>
   sticky?: boolean
   className?: string
+  onOpenDocuments?: () => void
 }
 
 export default function PatientSummaryCard({
   patientName,
+  patientId,
   age,
   phone,
   status,
@@ -38,6 +42,7 @@ export default function PatientSummaryCard({
   vitals,
   sticky = true,
   className = "",
+  onOpenDocuments,
 }: PatientSummaryCardProps) {
   const dateLabel =
     appointmentDate &&
@@ -57,7 +62,24 @@ export default function PatientSummaryCard({
             <PatientAvatar name={patientName} />
             <div className="min-w-0">
               <h2 className="patient-summary-card__name">{patientName || "Patient"}</h2>
-              <div className="patient-summary-card__meta">
+              <div className="patient-summary-card__meta flex flex-wrap items-center gap-x-2 gap-y-1">
+                {patientId && (
+                  <span className="font-semibold text-slate-700">
+                    ID: <span className="font-bold text-slate-900">{patientId}</span>
+                  </span>
+                )}
+                {onOpenDocuments && (
+                  <button
+                    type="button"
+                    onClick={onOpenDocuments}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-sky-50 hover:text-sky-700 hover:border-sky-300 transition-colors cursor-pointer"
+                    title="View patient documents"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                    View documents
+                  </button>
+                )}
+                {(patientId || onOpenDocuments) && (phone || age != null) && <span className="text-slate-300">·</span>}
                 {phone && <span>{phone}</span>}
                 {phone && age != null && <span className="text-slate-300">·</span>}
                 {age != null && <span>{age} yrs</span>}

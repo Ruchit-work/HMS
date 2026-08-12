@@ -14,11 +14,35 @@ import {
   User,
 } from "lucide-react"
 
-function formatTime12(time: string) {
-  const [hours, minutes] = time.split(":").map(Number)
+function formatTime12(time?: string | null): string {
+  if (!time || typeof time !== "string") return "--:--"
+
+  const trimmed = time.trim()
+  if (!trimmed) return "--:--"
+
+  const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+  if (ampmMatch) {
+    const [, hStr, mStr, suffix] = ampmMatch
+    return `${Number(hStr)}:${mStr} ${suffix.toUpperCase()}`
+  }
+
+  const parts = trimmed.split(":")
+  if (parts.length < 2) {
+    return trimmed
+  }
+
+  const hours = Number(parts[0])
+  const minutes = Number(parts[1].replace(/[^0-9]/g, ""))
+
+  if (isNaN(hours) || isNaN(minutes)) {
+    return trimmed
+  }
+
   const h = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
   const suffix = hours >= 12 ? "PM" : "AM"
-  return `${h}:${minutes.toString().padStart(2, "0")} ${suffix}`
+  const m = minutes.toString().padStart(2, "0")
+
+  return `${h}:${m} ${suffix}`
 }
 
 function getGreeting() {
@@ -282,7 +306,9 @@ export function TodayScheduleTimeline({
       ) : (
         <div className="p-4 space-y-2 max-h-[22rem] overflow-y-auto">
           {appointments.map((apt) => {
-            const isPast = new Date(`${apt.appointmentDate}T${apt.appointmentTime}`).getTime() < Date.now()
+            const dateStr = apt.appointmentDate || ""
+            const timeStr = apt.appointmentTime || ""
+            const isPast = dateStr && timeStr ? new Date(`${dateStr}T${timeStr}`).getTime() < Date.now() : false
             return (
               <button
                 key={apt.id}

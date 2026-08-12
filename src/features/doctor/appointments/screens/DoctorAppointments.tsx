@@ -27,6 +27,7 @@ import { DocumentMetadata } from "@/types/document"
 import { parsePrescription as parsePrescriptionUtil } from "@/shared/utils/appointments/prescriptionParsers"
 import { formatMedicinesAsText as formatMedicinesAsTextUtil } from "@/shared/utils/appointments/prescriptionFormatters"
 import { TabKey, CompletionFormEntry, hasValidPrescriptionInput, QueueView } from "@/types/appointments"
+import { getMaxPrescriptionDurationDays } from "@/shared/utils/prescriptionWorkspace"
 import ConsultationModeModal from "@/features/doctor/appointments/modals/ConsultationModeModal"
 import CompletionSuccessModal from "@/features/doctor/appointments/modals/CompletionSuccessModal"
 import PrescriptionDisplay from "@/features/prescription/PrescriptionDisplay"
@@ -1999,11 +2000,16 @@ function DoctorAppointmentsContent() {
                             const existing =
                               completionData[selectedAppointment.id]?.medicines ||
                               []
+                            const newMedicines = [...existing, ...toAdd]
+                            const maxDays = getMaxPrescriptionDurationDays(newMedicines)
+                            const currentEntry = completionData[selectedAppointment.id]
+                            const nextRecheckupDays = maxDays > 0 ? maxDays : (currentEntry?.recheckupDays ?? 7)
                             setCompletionData((prev) => ({
                               ...prev,
                               [selectedAppointment.id]: {
                                 ...prev[selectedAppointment.id],
-                                medicines: [...existing, ...toAdd],
+                                medicines: newMedicines,
+                                recheckupDays: nextRecheckupDays,
                               },
                             }))
                             setShowAiPrescriptionSuggestion((prev) => ({
@@ -2016,15 +2022,19 @@ function DoctorAppointmentsContent() {
                             }))
                           }}
                           onAiPrescriptionAddSingle={(med, originalIndex) => {
+                            const existing =
+                              completionData[selectedAppointment.id]?.medicines ||
+                              []
+                            const newMedicines = [...existing, med]
+                            const maxDays = getMaxPrescriptionDurationDays(newMedicines)
+                            const currentEntry = completionData[selectedAppointment.id]
+                            const nextRecheckupDays = maxDays > 0 ? maxDays : (currentEntry?.recheckupDays ?? 7)
                             setCompletionData((prev) => ({
                               ...prev,
                               [selectedAppointment.id]: {
                                 ...prev[selectedAppointment.id],
-                                medicines: [
-                                  ...(prev[selectedAppointment.id]?.medicines ||
-                                    []),
-                                  med,
-                                ],
+                                medicines: newMedicines,
+                                recheckupDays: nextRecheckupDays,
                               },
                             }))
                             setRemovedAiMedicines((prev) => ({

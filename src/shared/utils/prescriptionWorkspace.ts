@@ -171,3 +171,41 @@ export function mergeMedicines(
   })
   return merged
 }
+
+export function parseDurationToDays(durationStr?: string): number {
+  if (!durationStr || typeof durationStr !== "string") return 0
+  const trimmed = durationStr.trim().toLowerCase()
+  if (!trimmed) return 0
+
+  const monthMatch = trimmed.match(/(\d+)\s*m(onth)?s?/)
+  if (monthMatch) {
+    return parseInt(monthMatch[1], 10) * 30
+  }
+
+  const weekMatch = trimmed.match(/(\d+)\s*w(eek)?s?/)
+  if (weekMatch) {
+    return parseInt(weekMatch[1], 10) * 7
+  }
+
+  const numbers = trimmed.match(/\d+/g)
+  if (!numbers || numbers.length === 0) return 0
+
+  const maxNum = Math.max(...numbers.map((n) => parseInt(n, 10)))
+  return isNaN(maxNum) ? 0 : maxNum
+}
+
+export function getMaxPrescriptionDurationDays(
+  medicines?: Array<{ duration?: string }>
+): number {
+  if (!medicines || !Array.isArray(medicines) || medicines.length === 0) return 0
+  let maxDays = 0
+  for (const med of medicines) {
+    if (med && med.duration) {
+      const days = parseDurationToDays(med.duration)
+      if (days > maxDays) {
+        maxDays = days
+      }
+    }
+  }
+  return maxDays
+}

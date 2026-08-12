@@ -29,24 +29,17 @@ export default function PatientSummaryBar({
   if (appointment.patientWeightKg) vitals.push({ label: "Weight", value: `${appointment.patientWeightKg} kg` })
   if (appointment.vitalSpO2) vitals.push({ label: "SpO₂", value: `${appointment.vitalSpO2}%` })
 
-  const actions = onOpenDocuments ? (
-    <>
-      <Button type="button" variant="outline" size="sm" onClick={onOpenDocuments}>
-        <FolderOpen className="w-4 h-4" />
-        Documents
-      </Button>
-      {onOpenConsentVideo && (
-        <Button type="button" variant="secondary" size="sm" onClick={onOpenConsentVideo}>
-          <Play className="w-4 h-4" />
-          Consent
-        </Button>
-      )}
-    </>
+  const actions = onOpenConsentVideo ? (
+    <Button type="button" variant="secondary" size="sm" onClick={onOpenConsentVideo}>
+      <Play className="w-4 h-4" />
+      Consent
+    </Button>
   ) : undefined
 
   return (
     <PatientSummaryCard
       patientName={appointment.patientName || "Patient"}
+      patientId={appointment.patientId || appointment.id}
       age={age}
       phone={appointment.patientPhone}
       status={appointment.status}
@@ -57,6 +50,7 @@ export default function PatientSummaryBar({
       isReturningPatient={isReturningPatient}
       vitals={vitals.length > 0 ? vitals : undefined}
       actions={actions}
+      onOpenDocuments={onOpenDocuments}
       sticky
     />
   )

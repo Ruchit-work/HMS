@@ -29,18 +29,22 @@ const REPORT_KEYWORDS = [
 
 const FOLLOW_UP_KEYWORDS = ["re-checkup", "recheckup", "follow-up", "follow up", "revisit"]
 
-export function isToday(dateStr: string) {
-  return new Date(dateStr).toDateString() === new Date().toDateString()
+export function isToday(dateStr?: string) {
+  if (!dateStr) return false
+  const d = new Date(dateStr)
+  return !isNaN(d.getTime()) && d.toDateString() === new Date().toDateString()
 }
 
 export function compareAppointmentsByDateTime(a: Appointment, b: Appointment) {
-  const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
-  const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`).getTime()
-  return dateA - dateB
+  const timeA = a?.appointmentDate && a?.appointmentTime ? new Date(`${a.appointmentDate}T${a.appointmentTime}`).getTime() : 0
+  const timeB = b?.appointmentDate && b?.appointmentTime ? new Date(`${b.appointmentDate}T${b.appointmentTime}`).getTime() : 0
+  return (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB)
 }
 
 export function getAppointmentTimestamp(apt: Appointment) {
-  return new Date(`${apt.appointmentDate}T${apt.appointmentTime}`).getTime()
+  if (!apt || !apt.appointmentDate || !apt.appointmentTime) return 0
+  const ts = new Date(`${apt.appointmentDate}T${apt.appointmentTime}`).getTime()
+  return isNaN(ts) ? 0 : ts
 }
 
 function matchesKeywords(text: string, keywords: string[]) {
@@ -89,11 +93,12 @@ export interface MorningClinicSnapshot {
   emergencyCount: number
 }
 
-export function buildMorningClinicSnapshot(appointments: Appointment[]): MorningClinicSnapshot {
+export function buildMorningClinicSnapshot(appointments: Appointment[] = []): MorningClinicSnapshot {
+  const safeAppointments = Array.isArray(appointments) ? appointments : []
   const now = Date.now()
 
-  const confirmedToday = appointments
-    .filter((apt) => isToday(apt.appointmentDate) && apt.status === "confirmed")
+  const confirmedToday = safeAppointments
+    .filter((apt) => apt && isToday(apt.appointmentDate) && apt.status === "confirmed")
     .sort(compareAppointmentsByDateTime)
 
   const waitingQueue = confirmedToday.filter((apt) => getAppointmentTimestamp(apt) <= now)

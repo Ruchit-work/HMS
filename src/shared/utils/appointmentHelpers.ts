@@ -120,8 +120,10 @@ export const completeAppointment = async (
   const qs = await getDocs(qConfirmedToday)
   const pendingToday = qs.docs.map(d => ({ id: d.id, ...(d.data() as any) }))
   const toMinutes = (t: string) => {
-    const [h, m] = String(t||"0:0").split(":").map(Number)
-    return h * 60 + m
+    const parts = String(t || "0:0").split(":")
+    const h = Number(parts[0])
+    const m = Number(parts[1])
+    return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m)
   }
   const targetTime = toMinutes(String(apt.appointmentTime))
   const earlierPending = pendingToday.filter(p => toMinutes(String(p.appointmentTime)) < targetTime)

@@ -33,16 +33,15 @@ export const DEFAULT_VISITING_HOURS: VisitingHours = {
 }
 
 
-export function normalizeTime(time: string): string {
-  if (!time || typeof time !== "string") return time
+export function normalizeTime(time?: string | null): string {
+  if (!time || typeof time !== "string") return "00:00"
   if (time.toUpperCase().includes("FCFS")) return time.trim()
 
   // Remove spaces and convert to uppercase
   let normalized = time.trim().replace(/\s+/g, "").toUpperCase()
   
-  // Check if it's already in 24-hour format (HH:MM or HH-MM)
+  // Check if it's already in 12-hour format (HH:MM AM/PM)
   if (normalized.includes("AM") || normalized.includes("PM")) {
-    // 12-hour format - convert to 24-hour
     const match = normalized.match(/^(\d{1,2})[:\-]?(\d{2})\s*(AM|PM)$/)
     if (match) {
       let hours = parseInt(match[1], 10)
@@ -60,7 +59,6 @@ export function normalizeTime(time: string): string {
   } else {
     // Already in 24-hour format, just normalize separators
     normalized = normalized.replace(/-/g, ":")
-    // Ensure format is HH:MM
     const parts = normalized.split(":")
     if (parts.length === 2) {
       const hours = parseInt(parts[0], 10)
@@ -75,14 +73,19 @@ export function normalizeTime(time: string): string {
 }
 
 // Convert time string to minutes since midnight
-export function timeToMinutes(time: string): number {
+export function timeToMinutes(time?: string | null): number {
+  if (!time || typeof time !== "string") return 0
   const normalized = normalizeTime(time)
-  const [hours, minutes] = normalized.split(':').map(Number)
+  const parts = normalized.split(':')
+  const hours = Number(parts[0])
+  const minutes = Number(parts[1])
+  if (isNaN(hours) || isNaN(minutes)) return 0
   return hours * 60 + minutes
 }
 
 // Convert minutes since midnight to time string
 export function minutesToTime(minutes: number): string {
+  if (typeof minutes !== "number" || isNaN(minutes) || minutes < 0) return "00:00"
   const hours = Math.floor(minutes / 60)
   const mins = minutes % 60
   return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`
@@ -336,10 +339,13 @@ export function getAvailableTimeSlots(
 }
 
 // Format time for display (convert 24h to 12h format)
-export function formatTimeDisplay(time: string): string {
-  if (!time) return "N/A"
-  if (time.toUpperCase().includes("FCFS")) return time
-  const [hours, minutes] = time.split(':').map(Number)
+export function formatTimeDisplay(time?: string | null): string {
+  if (!time || typeof time !== "string") return "N/A"
+  if (time.toUpperCase().includes("FCFS")) return time.trim()
+  const parts = time.split(':')
+  if (parts.length < 2) return time
+  const hours = Number(parts[0])
+  const minutes = Number(parts[1].replace(/[^0-9]/g, ""))
   if (isNaN(hours) || isNaN(minutes)) return time
   const period = hours >= 12 ? 'PM' : 'AM'
   const displayHours = hours % 12 || 12

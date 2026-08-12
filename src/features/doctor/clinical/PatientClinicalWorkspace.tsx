@@ -114,7 +114,24 @@ export default function PatientClinicalWorkspace({
                   )}
                 </div>
 
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-slate-600">
+                  <span className="inline-flex items-center gap-1.5">
+                    <strong className="text-slate-800">ID</strong>{" "}
+                    <span className="font-semibold text-slate-900">
+                      {appointment.patientId || appointment.patientUid || appointment.id}
+                    </span>
+                    {onOpenDocuments && (
+                      <button
+                        type="button"
+                        onClick={onOpenDocuments}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-sky-50 hover:text-sky-700 hover:border-sky-300 transition-colors shadow-2xs cursor-pointer ml-1"
+                        title="View patient documents"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                        View documents
+                      </button>
+                    )}
+                  </span>
                   {age != null && <span><strong className="text-slate-800">Age</strong> {age} yrs</span>}
                   {appointment.patientGender && <span><strong className="text-slate-800">Gender</strong> {appointment.patientGender}</span>}
                   {appointment.patientBloodGroup && <span><strong className="text-slate-800">Blood</strong> {appointment.patientBloodGroup}</span>}
@@ -155,20 +172,12 @@ export default function PatientClinicalWorkspace({
             </div>
           )}
 
-          {!isHistoryView && (onOpenDocuments || onOpenConsentVideo) && (
+          {!isHistoryView && onOpenConsentVideo && (
             <div className="mt-4 flex flex-wrap gap-2 pt-3 border-t border-slate-100">
-              {onOpenDocuments && (
-                <Button type="button" variant="outline" size="sm" onClick={onOpenDocuments}>
-                  <FolderOpen className="w-4 h-4" />
-                  Documents
-                </Button>
-              )}
-              {onOpenConsentVideo && (
-                <Button type="button" variant="secondary" size="sm" onClick={onOpenConsentVideo}>
-                  <Play className="w-4 h-4" />
-                  Consent
-                </Button>
-              )}
+              <Button type="button" variant="secondary" size="sm" onClick={onOpenConsentVideo}>
+                <Play className="w-4 h-4" />
+                Consent
+              </Button>
             </div>
           )}
 

@@ -4,6 +4,8 @@ import { Button } from '@/shared/components'
 import {
   CheckCircle2,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Hospital,
   Printer,
   RefreshCw,
@@ -98,16 +100,38 @@ export default function ConsultationActionBar({
           {recheckupRequired && onRecheckupDaysChange && (
             <div className="flex items-center gap-1 ml-1">
               <span className="text-[10px] text-slate-400">in</span>
-              <input
-                type="number"
-                min={1}
-                max={365}
-                value={recheckupDays}
-                onChange={(e) =>
-                  onRecheckupDaysChange(Math.max(1, Math.min(365, parseInt(e.target.value, 10) || 1)))
-                }
-                className="w-12 px-1.5 py-0.5 text-xs rounded border border-slate-300 text-slate-800 text-center focus:outline-none focus:ring-1 focus:ring-sky-500/40"
-              />
+              <div className="relative inline-flex items-center rounded border border-slate-300 bg-white shadow-xs overflow-hidden focus-within:ring-1 focus-within:ring-sky-500 focus-within:border-sky-500">
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={recheckupDays}
+                  onChange={(e) =>
+                    onRecheckupDaysChange(Math.max(1, Math.min(365, parseInt(e.target.value, 10) || 1)))
+                  }
+                  className="w-9 px-1 py-0.5 text-xs text-slate-800 font-semibold text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <div className="flex flex-col border-l border-slate-200 divide-y divide-slate-100 bg-slate-50">
+                  <button
+                    type="button"
+                    onClick={() => onRecheckupDaysChange(Math.min(365, (recheckupDays || 1) + 1))}
+                    className="px-1 py-[1px] hover:bg-sky-100 text-slate-500 hover:text-sky-700 transition-colors flex items-center justify-center"
+                    title="Increase days"
+                    aria-label="Increase days"
+                  >
+                    <ChevronUp className="w-2.5 h-2.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRecheckupDaysChange(Math.max(1, (recheckupDays || 1) - 1))}
+                    className="px-1 py-[1px] hover:bg-sky-100 text-slate-500 hover:text-sky-700 transition-colors flex items-center justify-center"
+                    title="Decrease days"
+                    aria-label="Decrease days"
+                  >
+                    <ChevronDown className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              </div>
               <span className="text-[10px] text-slate-400">days</span>
             </div>
           )}

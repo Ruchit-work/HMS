@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { PanelLeftClose, PanelLeftOpen, ChevronUp, ChevronDown } from "lucide-react"
 
 import { Appointment as AppointmentType } from "@/types/patient"
 import { CompletionFormEntry } from "@/types/appointments"
@@ -14,7 +14,7 @@ import ConsultationClinicalPanel from "@/features/doctor/clinical/consultation/C
 import ConsultationContextPanel from "@/features/doctor/clinical/consultation/ConsultationContextPanel"
 import ConsultationOrdersPanel from "@/features/doctor/clinical/consultation/ConsultationOrdersPanel"
 import PrescriptionQuickAccess from "@/features/doctor/clinical/consultation/PrescriptionQuickAccess"
-import { mergeMedicines } from "@/shared/utils/prescriptionWorkspace"
+import { mergeMedicines, getMaxPrescriptionDurationDays } from "@/shared/utils/prescriptionWorkspace"
 import { hasClinicalDocumentation } from "@/features/doctor/clinical/consultation/consultationNotesUtils"
 
 interface CompletionFormProps {
@@ -128,9 +128,12 @@ export default function CompletionForm({
   }, [])
 
   const handleMedicinesChange = (medicines: CompletionFormEntry["medicines"]) => {
+    const maxDays = getMaxPrescriptionDurationDays(medicines)
+    const nextRecheckupDays = maxDays > 0 ? maxDays : (completionDataRef.current.recheckupDays ?? 7)
     onCompletionDataChange({
       ...completionDataRef.current,
       medicines,
+      recheckupDays: nextRecheckupDays,
     })
   }
 
@@ -151,9 +154,13 @@ export default function CompletionForm({
   }
 
   const handleRecheckupRequiredChange = (recheckupRequired: boolean) => {
+    const maxDays = getMaxPrescriptionDurationDays(completionDataRef.current.medicines)
+    const currentDays = completionDataRef.current.recheckupDays
+    const nextRecheckupDays = maxDays > 0 ? maxDays : (currentDays && currentDays > 0 ? currentDays : 7)
     onCompletionDataChange({
       ...completionDataRef.current,
       recheckupRequired,
+      recheckupDays: nextRecheckupDays,
     })
   }
 
@@ -181,19 +188,6 @@ export default function CompletionForm({
   if (layout === "workspace") {
     const leftExtraBottom = (
       <>
-        <PrescriptionQuickAccess
-          doctorUid={doctorUid || ""}
-          appointment={appointment}
-          patientHistory={patientHistory}
-          medicines={completionData.medicines || []}
-          medicineSuggestions={medicineSuggestions}
-          onApplyMedicines={(toAdd) =>
-            handleMedicinesChange(mergeMedicines(completionData.medicines || [], toAdd))
-          }
-          onCopyPrevious={onCopyPreviousPrescription}
-          showUsePrevious={sameDoctorHistory.length > 0}
-        />
-
         {completionData.recheckupRequired && (
           <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100 bg-slate-50/70">
@@ -432,18 +426,40 @@ export default function CompletionForm({
               <label htmlFor={`recheckupDays-${appointment.id}`} className="block text-sm font-medium text-slate-700 mb-1">
                 Follow-up after (days) — Sundays skipped
               </label>
-              <input
-                id={`recheckupDays-${appointment.id}`}
-                type="number"
-                min={1}
-                max={365}
-                value={completionData.recheckupDays ?? 7}
-                onChange={(e) =>
-                  handleRecheckupDaysChange(Math.max(1, Math.min(365, parseInt(e.target.value, 10) || 1)))
-                }
-                className="max-w-[120px] w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500"
-                placeholder="Days"
-              />
+              <div className="relative inline-flex items-center rounded-lg border border-slate-300 bg-white shadow-sm overflow-hidden focus-within:ring-2 focus-within:ring-sky-500/30 focus-within:border-sky-500">
+                <input
+                  id={`recheckupDays-${appointment.id}`}
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={completionData.recheckupDays ?? 7}
+                  onChange={(e) =>
+                    handleRecheckupDaysChange(Math.max(1, Math.min(365, parseInt(e.target.value, 10) || 1)))
+                  }
+                  className="w-20 px-3 py-2 text-sm font-semibold text-slate-900 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  placeholder="Days"
+                />
+                <div className="flex flex-col border-l border-slate-200 divide-y divide-slate-100 bg-slate-50">
+                  <button
+                    type="button"
+                    onClick={() => handleRecheckupDaysChange(Math.min(365, (completionData.recheckupDays ?? 7) + 1))}
+                    className="px-2 py-1 hover:bg-sky-100 text-slate-500 hover:text-sky-700 transition-colors flex items-center justify-center"
+                    title="Increase days"
+                    aria-label="Increase days"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRecheckupDaysChange(Math.max(1, (completionData.recheckupDays ?? 7) - 1))}
+                    className="px-2 py-1 hover:bg-sky-100 text-slate-500 hover:text-sky-700 transition-colors flex items-center justify-center"
+                    title="Decrease days"
+                    aria-label="Decrease days"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
             <div>
               <label htmlFor={`recheckupNote-${appointment.id}`} className="block text-sm font-medium text-slate-700 mb-1">
