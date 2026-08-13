@@ -185,7 +185,7 @@ export async function GET(request: Request) {
     targetIST.setUTCMilliseconds(0)
     
     const targetDateUTC = new Date(targetIST.getTime() - istOffset)
-    const hospitalName = process.env.HOSPITAL_NAME || "Harmony Medical Services"
+    const hospitalName = process.env.HOSPITAL_NAME?.trim() || "our hospital"
     const advertisements = await generateAdvertisements(healthDays, hospitalName)
 
     const db = admin.firestore()

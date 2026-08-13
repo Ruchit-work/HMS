@@ -346,13 +346,14 @@ export default function AppoinmentManagement({
         return filteredAppointments.filter((a) => set.has(a.id))
     }, [filteredAppointments, selectedIds])
 
-    const handleBulkCancel = async () => {
-        if (selectedAppointments.length === 0) return
+    const handleBulkCancel = useCallback(async (rows?: Appointment[]) => {
+        const items = rows && rows.length > 0 ? rows : selectedAppointments
+        if (items.length === 0) return
         setProcessingBulk(true)
         try {
             let cancelledCount = 0
             let skippedPaid = 0
-            for (const apt of selectedAppointments) {
+            for (const apt of items) {
                 const s = String((apt as any).status || '')
                 if (s === 'cancelled' || s === 'doctor_cancelled' || s === 'completed' || s === 'refund_requested') continue
                 // Paid appointments that require an interactive refund decision are skipped in bulk.
@@ -386,17 +387,19 @@ export default function AppoinmentManagement({
         } finally {
             setProcessingBulk(false)
         }
-    }
-    const handleBulkComplete = async () => {
-        if (selectedAppointments.length === 0) return
+    }, [selectedAppointments, billingSettings, activeHospitalId])
+
+    const handleBulkComplete = useCallback(async (rows?: Appointment[]) => {
+        const items = rows && rows.length > 0 ? rows : selectedAppointments
+        if (items.length === 0) return
         setProcessingBulk(true)
         try {
-            for (const apt of selectedAppointments) {
+            for (const apt of items) {
                 if (apt.status === 'completed') continue
                 const ref = doc(getHospitalCollection(activeHospitalId!, 'appointments'), apt.id)
                 await updateDoc(ref, { status: 'completed', updatedAt: new Date().toISOString() })
             }
-            setSuccessMessage(`Marked ${selectedAppointments.length} as completed`)
+            setSuccessMessage(`Marked ${items.length} as completed`)
             setSelectedIds(new Set())
             setTimeout(() => setSuccessMessage(null), 3000)
         } catch (e) {
@@ -404,7 +407,7 @@ export default function AppoinmentManagement({
         } finally {
             setProcessingBulk(false)
         }
-    }
+    }, [selectedAppointments, activeHospitalId])
     const exportCSV = () => {
         const headers = ['Patient', 'Doctor', 'Date', 'Time', 'Visit Type', 'Appointment Type', 'Status', 'Payment', 'Amount']
         const rows = filteredAppointments.map((a) => [
@@ -1085,15 +1088,15 @@ export default function AppoinmentManagement({
             {
                 label: 'Mark Completed',
                 variant: 'success',
-                onClick: () => handleBulkComplete(),
+                onClick: (rows) => handleBulkComplete(rows),
             },
             {
                 label: 'Cancel',
                 variant: 'danger',
-                onClick: () => handleBulkCancel(),
+                onClick: (rows) => handleBulkCancel(rows),
             },
         ],
-        []
+        [handleBulkComplete, handleBulkCancel]
     )
 
     // Protect component - only allow admins (moved after all hooks)

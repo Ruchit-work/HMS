@@ -386,6 +386,18 @@ export async function PUT(
         const patientName = updateData.patientName || updatedData.patientName || appointmentData.patientName || "Patient"
         
         if (patientPhone) {
+          let hospitalName = process.env.HOSPITAL_NAME?.trim() || "our hospital"
+          if (authorizedHospitalId) {
+            try {
+              const firestore = admin.firestore()
+              const hSnap = await firestore.collection("hospitals").doc(authorizedHospitalId).get()
+              if (hSnap.exists) {
+                const hData = hSnap.data()
+                hospitalName = hData?.name || hData?.hospitalName || process.env.HOSPITAL_NAME?.trim() || "our hospital"
+              }
+            } catch {}
+          }
+
           const doctorName = updateData.doctorName || updatedData.doctorName
           const doctorSpecialization = updateData.doctorSpecialization || updatedData.doctorSpecialization || ""
           
@@ -436,7 +448,7 @@ ${updatedData.chiefComplaint ? `• 📝 Reason: ${updatedData.chiefComplaint}` 
 
 If you need to reschedule or have any questions, reply here or call us at +91-XXXXXXXXXX.
 
-See you soon! 🏥`
+Thank you for choosing ${hospitalName}. 🏥`
 
           const result = await sendWhatsAppNotification({
             to: patientPhone,

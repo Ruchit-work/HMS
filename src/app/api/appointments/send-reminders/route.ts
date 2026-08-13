@@ -168,7 +168,7 @@ export async function GET(request: Request) {
               `✅ Carry a valid ID proof\n\n` +
               `If you need to reschedule or cancel, please reply to this message or call us as soon as possible.\n\n` +
               `We look forward to seeing you!\n\n` +
-              `Thank you for choosing Harmony Medical Services! 🏥`
+              `Thank you for choosing ${hospital.name || "our hospital"}! 🏥`
 
             // Send WhatsApp reminder
             const sentViaBhashTemplate = await sendBhashReminderTemplateIfConfigured({

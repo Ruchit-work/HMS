@@ -19,7 +19,7 @@ const GROQ_MODELS = [
 
 export async function generateAdvertisement(
   healthDay: HealthAwarenessDay,
-  hospitalName: string = "Harmony Medical Services"
+  hospitalName: string = "our hospital"
 ): Promise<GeneratedAdvertisement> {
   const apiKey = process.env.GROQ_API_KEY
 
@@ -251,7 +251,7 @@ Make it engaging, informative, and actionable. Remember, this is for Indian pati
  */
 export async function generateAdvertisements(
   healthDays: HealthAwarenessDay[],
-  hospitalName: string = "Harmony Medical Services"
+  hospitalName: string = "our hospital"
 ): Promise<Map<string, GeneratedAdvertisement>> {
   const results = new Map<string, GeneratedAdvertisement>()
   const errors: Array<{ day: string; error: string }> = []

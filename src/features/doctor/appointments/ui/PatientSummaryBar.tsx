@@ -4,7 +4,7 @@ import { Appointment as AppointmentType } from "@/types/patient"
 import { calculateAge } from "@/shared/utils/shared/date"
 import PatientSummaryCard from "@/features/doctor/clinical/PatientSummaryCard"
 import { Button } from '@/shared/components'
-import { FolderOpen, Play } from "lucide-react"
+import { Play } from "lucide-react"
 
 interface PatientSummaryBarProps {
   appointment: AppointmentType

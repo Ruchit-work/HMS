@@ -6,6 +6,7 @@ export function buildMissedAppointmentMessage(options: {
   doctorName: string
   appointmentDate: string
   appointmentTime: string
+  hospitalName?: string
 }): string {
   const patientName = options.patientName || "Patient"
   const doctorName = options.doctorName || "Doctor"
@@ -46,7 +47,7 @@ export function buildMissedAppointmentMessage(options: {
     `Date: ${formattedDate}\n` +
     `Time: ${formattedTime}\n\n` +
     `Please reply to this message or call us to reschedule.\n\n` +
-    `Thank you for choosing Harmony Medical Services.`
+    `Thank you for choosing ${options.hospitalName || process.env.HOSPITAL_NAME || "our hospital"}.`
   )
 }
 
@@ -56,6 +57,7 @@ export async function sendMissedAppointmentWhatsApp(options: {
   doctorName: string
   appointmentDate: string
   appointmentTime: string
+  hospitalName?: string
 }): Promise<{ success: boolean; sid?: string; error?: string }> {
   const messageText = buildMissedAppointmentMessage(options)
 

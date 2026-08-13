@@ -208,6 +208,18 @@ export async function POST(request: Request) {
         }
 
         if (patientPhone && patientPhone.trim() !== "") {
+          // Fetch hospital name for confirmation message
+          let hospitalName = process.env.HOSPITAL_NAME?.trim() || "our hospital"
+          if (doctorHospitalId) {
+            try {
+              const hDoc = await firestore.collection("hospitals").doc(doctorHospitalId).get()
+              if (hDoc.exists) {
+                const hData = hDoc.data()
+                hospitalName = hData?.name || hData?.hospitalName || process.env.HOSPITAL_NAME?.trim() || "our hospital"
+              }
+            } catch {}
+          }
+
           // Use the same message format as receptionist booking
           const patientName = appointmentData.patientName || "there"
           const fullName = patientName.trim() || "Patient"
@@ -257,7 +269,7 @@ ${appointmentData.chiefComplaint ? `• 📝 Reason: ${appointmentData.chiefComp
 
 If you need to reschedule or have any questions, reply here or call us at +91-XXXXXXXXXX.
 
-See you soon! 🏥`
+Thank you for choosing ${hospitalName}. 🏥`
 
           const sentViaBhashTemplate = await sendBhashConfirmationTemplateIfConfigured({
             to: patientPhone,
@@ -274,6 +286,7 @@ See you soon! 🏥`
               paymentMethod: String(paymentMethod),
               paymentAmount: Number(paymentAmount),
               paymentStatus: String(paymentStatus),
+              hospitalName,
             },
           })
 

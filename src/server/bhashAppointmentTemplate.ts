@@ -40,6 +40,7 @@ export interface BhashConfirmationTemplateParams {
   paymentMethod?: string
   paymentAmount?: number
   paymentStatus?: string
+  hospitalName?: string
 }
 
 /** Bhash Params are comma-separated — remove commas from each value. */
@@ -120,6 +121,11 @@ export function buildBhashConfirmationPlainText(
   const [name, via, doctor, date, time, id, payment] =
     buildBhashConfirmationParams(input)
 
+  const hospitalName =
+    input.hospitalName?.trim() ||
+    process.env.HOSPITAL_NAME?.trim() ||
+    "our hospital"
+
   return `Hello ${name},
 
 Your appointment has been confirmed ${via}.
@@ -130,7 +136,7 @@ Time: ${time}
 Appointment ID: ${id}
 Payment: ${payment}
 
-Thank you for choosing Harmony Medical Services.`
+Thank you for choosing ${hospitalName}.`
 }
 
 function resolveRecipientPhone(

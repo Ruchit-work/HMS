@@ -535,7 +535,7 @@ async function shouldSendGreeting(phone: string): Promise<boolean> {
 }
 
 function getHospitalDisplayName(): string {
-  return process.env.HOSPITAL_NAME?.trim() || "Harmony Medical Services"
+  return process.env.HOSPITAL_NAME?.trim() || "our hospital"
 }
 
 /** Main menu — selection is by number only (1 / 2). */
@@ -1283,15 +1283,16 @@ async function handleHelpCenter(phone: string) {
 }
 
 async function _handleIncomingText(phone: string) {
+  const hospital = getHospitalDisplayName()
   const buttonResponse = await sendButtonMessage(
     phone,
-    "Hi! 👋 Welcome to Harmony Medical Services.\n\nWould you like to book an appointment? Click the button below to get started.",
-    "Harmony Medical Services",
+    `Hi! 👋 Welcome to ${hospital}.\n\nWould you like to book an appointment? Click the button below to get started.`,
+    hospital,
     "book_appointment",
     "Book Appointment"
   )
   await sendWithFallback(phone, buttonResponse, "",
-    "Hi! 👋 Welcome to Harmony Medical Services.\n\nTo book an appointment, please contact our reception at +91-XXXXXXXXXX.")
+    `Hi! 👋 Welcome to ${hospital}.\n\nTo book an appointment, please contact our reception at +91-XXXXXXXXXX.`)
 }
 
 // Translation helper for multi-language support
@@ -1484,7 +1485,7 @@ async function moveToBranchSelection(
     phone,
     lang(language, "તમારી બ્રાન્ચ પસંદ કરો અથવા 'Next' પર ક્લિક કરો:", "Select your branch or click 'Next' to use default:"),
     branchButtons,
-    "Harmony Medical Services"
+    getHospitalDisplayName()
   )
 }
 
@@ -2219,7 +2220,7 @@ async function startBookingWithFlow(phone: string) {
         flowToken,
         "Book Your Appointment",
         "Please fill out the form below to schedule your appointment with our doctors.",
-        "Harmony Medical Services"
+        getHospitalDisplayName()
       )
 
       if (flowResponse.success) {
@@ -3593,7 +3594,7 @@ async function handleRegistrationFullName(
         { id: "book_appointment", title: "📅 Book Appointment" },
         { id: "help_center", title: "🆘 Help Center" },
       ],
-      "Harmony Medical Services"
+      getHospitalDisplayName()
     )
     
     if (!buttonResponse.success) {
@@ -4019,7 +4020,7 @@ async function sendDatePicker(
     dateMsg,
     truncatedButtonText,
     sections,
-    "Harmony Medical Services"
+    getHospitalDisplayName()
   )
 
   if (!listResponse.success) {
@@ -4110,7 +4111,7 @@ async function sendTimeSlotListForPeriod(
           rows,
         },
       ],
-      "Harmony Medical Services"
+      getHospitalDisplayName()
     )
 
     if (!listResponse.success) {
@@ -4657,7 +4658,7 @@ async function sendTimePicker(
     timeMsg,
     truncatedButtonText,
     sections,
-    "Harmony Medical Services"
+    getHospitalDisplayName()
   )
 
   if (!listResponse.success) {

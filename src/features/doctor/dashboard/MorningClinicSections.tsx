@@ -132,13 +132,13 @@ export function MorningGreeting({
   waitingCount,
   pendingCount,
   followUpCount,
-  reportsCount,
-  emergencyCount,
+  reportsCount: _reportsCount,
+  emergencyCount: _emergencyCount,
   dateLabel,
   onOpenQueue,
   activeInpatientsCount = 0,
   roundsDueCount = 0,
-  dischargeRequestsCount = 0,
+  dischargeRequestsCount: _dischargeRequestsCount = 0,
 }: MorningGreetingProps) {
   return (
     <section className="clinical-surface overflow-hidden">

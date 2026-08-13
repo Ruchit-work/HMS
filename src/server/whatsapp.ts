@@ -104,7 +104,7 @@ export async function sendWhatsAppNotification(options: {
     }
 
     const hospitalName =
-      process.env.HOSPITAL_NAME?.trim() || "Harmony Medical Services"
+      process.env.HOSPITAL_NAME?.trim() || "our hospital"
     messageBody += `\n\n_This is an automated message from ${hospitalName}._`
 
     // Bhash path — campaigns/notifications (util-reply; works in open WhatsApp session)

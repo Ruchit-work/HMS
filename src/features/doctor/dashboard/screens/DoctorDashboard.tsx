@@ -3,7 +3,6 @@ import { fetchBranches } from "@/services/BranchService"
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import Link from "next/link"
 import { auth, db } from "@/firebase/config"
 import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/shared/hooks/useAuth"
@@ -27,7 +26,6 @@ import type { Branch } from "@/types/branch"
 import {
   ActiveInpatientsSection,
   AppointmentQueueList,
-  ClinicNotifications,
   MorningGreeting,
   NextPatientCard,
   QuickClinicalActions,

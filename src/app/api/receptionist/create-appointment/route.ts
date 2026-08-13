@@ -52,6 +52,8 @@ const sendAppointmentWhatsApp = async (appointmentData: UnknownRecord) => {
       : timeStr
   }
   
+  const hospitalName = getString(appointmentData.hospitalName) || process.env.HOSPITAL_NAME?.trim() || "our hospital"
+
   const message = `🎉 *Appointment Successfully Booked!*
 
 Hi ${fullName},
@@ -74,7 +76,7 @@ ${appointmentData.chiefComplaint ? `• 📝 Reason: ${appointmentData.chiefComp
 
 If you need to reschedule or have any questions, reply here or call us at +91-XXXXXXXXXX.
 
-See you soon! 🏥`
+Thank you for choosing ${hospitalName}. 🏥`
 
   // Try multiple phone number fields
   const phoneCandidates = [
@@ -103,6 +105,7 @@ See you soon! 🏥`
       paymentMethod,
       paymentAmount,
       paymentStatus,
+      hospitalName,
     },
   })
 
@@ -201,6 +204,17 @@ export async function POST(request: Request) {
     const doctorDoc = await admin.firestore().collection("doctors").doc(String(appointmentData.doctorId)).get()
     const doctorData = doctorDoc.exists ? doctorDoc.data() : {}
     const doctorBaseFee = doctorData?.consultationFee || appointmentData.paymentAmount || 0
+
+    let hospitalName = process.env.HOSPITAL_NAME?.trim() || "our hospital"
+    if (doctorHospitalId) {
+      try {
+        const hospitalDoc = await admin.firestore().collection("hospitals").doc(doctorHospitalId).get()
+        if (hospitalDoc.exists) {
+          const hd = hospitalDoc.data()
+          hospitalName = hd?.name || hd?.hospitalName || process.env.HOSPITAL_NAME?.trim() || "our hospital"
+        }
+      } catch {}
+    }
     
     const billingSettings = await getHospitalBillingSettings(doctorHospitalId)
     const consultationFee = getEffectiveConsultationFee(doctorBaseFee, visitType, billingSettings)
@@ -445,6 +459,7 @@ export async function POST(request: Request) {
           doctorSpecialization: docData.doctorSpecialization,
           appointmentDate: docData.appointmentDate,
           appointmentTime: docData.appointmentTime,
+          hospitalName,
         })
       } catch {
       }

@@ -1,41 +1,10 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { sendBhashWelcomeTemplateIfConfigured } from "@/server/bhashUtilityTemplates"
-import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
-import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
 import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
 import { getUserActiveHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
 import { createPatientDualWrite } from "@/services/server/PatientService"
 import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 import { getActorInfo } from "@/shared/utils/auditHelpers"
-
-const buildWelcomeMessage = (firstName?: string, lastName?: string, patientId?: string, email?: string) => {
-  const friendlyName = firstName?.trim() || "there"
-  const fullName = `${firstName || ""} ${lastName || ""}`.trim() || "Patient"
-  const idCopy = patientId ? `• Patient ID: ${patientId}` : ""
-  const emailCopy = email ? `• Email: ${email}` : ""
-  
-  return `🎉 *Account Successfully Created!*
-
-Hi ${friendlyName},
-
-Welcome to Harmony Medical Services! Your patient account has been successfully created by our receptionist.
-
-📋 *Account Details:*
-${idCopy}
-• Name: ${fullName}
-${emailCopy}
-
-✅ You can now:
-• Book appointments with our doctors
-• View your medical history
-• Access your patient dashboard
-• Receive appointment updates and reminders via WhatsApp
-
-If you need any assistance, reply here or call us at +91-XXXXXXXXXX.
-
-Thank you for choosing Harmony Medical Services! 🏥`
-}
 
 export async function POST(request: Request) {
   // Apply rate limiting first
@@ -240,53 +209,7 @@ export async function POST(request: Request) {
       })
     }
 
-    // Try multiple phone number fields and formats
-    const phoneCandidates = [
-      patientData.phone,
-      patientData.phoneNumber,
-      `${patientData.phoneCountryCode || ""}${patientData.phoneNumber || ""}`,
-      docData.phone, // Also check stored phone in docData
-    ].filter((phone) => phone && typeof phone === "string" && phone.trim() !== "")
 
-    // Send WhatsApp notification only if we have a phone number (don't block on this)
-    if (phoneCandidates.length > 0) {
-      try {
-        const fullName = `${docData.firstName || ""} ${docData.lastName || ""}`.trim() || "Patient"
-        const sentViaBhashTemplate = await sendBhashWelcomeTemplateIfConfigured({
-          to: phoneCandidates[0],
-          fallbackRecipients: phoneCandidates.slice(1),
-          firstName: docData.firstName,
-          patientId,
-          fullName,
-        })
-
-        if (sentViaBhashTemplate || shouldUseBhashSms()) {
-          // Bhash template sent or provider is bhash — skip plain text fallback
-        } else {
-          const result = await sendWhatsAppNotification({
-            to: phoneCandidates[0],
-            fallbackRecipients: phoneCandidates.slice(1),
-            message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
-          })
-          if (!result.success) {
-            // Try fallback recipients if primary failed
-            if (phoneCandidates.length > 1 && result.errorCode !== 4) { // Don't retry on rate limit
-              for (let i = 1; i < phoneCandidates.length; i++) {
-                const fallbackResult = await sendWhatsAppNotification({
-                  to: phoneCandidates[i],
-                  message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
-                })
-                if (fallbackResult.success) {
-                  break
-                }
-              }
-            }
-          }
-        }
-      } catch {
-      }
-    } else {
-    }
 
     void auditLogger.logForUser(auth.user, {
       hospitalId: userHospitalId,
