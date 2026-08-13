@@ -294,6 +294,24 @@ export default function DoctorInpatientsPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!loading && inpatients.length > 0) {
+      const expandId = sessionStorage.getItem("expandAdmissionId")
+      if (expandId) {
+        sessionStorage.removeItem("expandAdmissionId")
+        setExpandedAdmissionId(expandId)
+      }
+      const viewId = sessionStorage.getItem("viewAdmissionId")
+      if (viewId) {
+        sessionStorage.removeItem("viewAdmissionId")
+        const target = inpatients.find((item) => item.id === viewId)
+        if (target) {
+          handleViewPatientDetails(target)
+        }
+      }
+    }
+  }, [loading, inpatients, handleViewPatientDetails])
+
   const patientProfileEntries = useMemo(() => {
     if (!patientHistory.patientProfile) return []
     const hiddenKeys = new Set([
@@ -308,6 +326,9 @@ export default function DoctorInpatientsPage() {
       "phoneNumber",
       "hospitalId",
       "updatedAt",
+      "updatedBy",
+      "updatedByRole",
+      "updatedFields",
       "status",
     ])
     return Object.entries(patientHistory.patientProfile)

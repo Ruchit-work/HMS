@@ -9,12 +9,9 @@ import { DocumentMetadata } from "@/types/document"
 import { MedicineSuggestion } from "@/shared/utils/medicineSuggestions"
 import MedicineForm from "@/features/doctor/appointments/forms/MedicineForm"
 import PrescriptionPanel from "@/features/doctor/clinical/PrescriptionPanel"
-import ConsultationWorkspace from "@/features/doctor/clinical/ConsultationWorkspace"
 import ConsultationClinicalPanel from "@/features/doctor/clinical/consultation/ConsultationClinicalPanel"
-import ConsultationContextPanel from "@/features/doctor/clinical/consultation/ConsultationContextPanel"
 import ConsultationOrdersPanel from "@/features/doctor/clinical/consultation/ConsultationOrdersPanel"
-import PrescriptionQuickAccess from "@/features/doctor/clinical/consultation/PrescriptionQuickAccess"
-import { mergeMedicines, getMaxPrescriptionDurationDays } from "@/shared/utils/prescriptionWorkspace"
+import { getMaxPrescriptionDurationDays } from "@/shared/utils/prescriptionWorkspace"
 import { hasClinicalDocumentation } from "@/features/doctor/clinical/consultation/consultationNotesUtils"
 
 interface CompletionFormProps {
@@ -95,7 +92,7 @@ export default function CompletionForm({
   onGenerateAiDiagnosis,
   onAiDiagnosisRegenerate,
   onDeclineAiDiagnosis,
-  onCopyPreviousPrescription,
+  onCopyPreviousPrescription: _onCopyPreviousPrescription,
   onDocumentUploadToggle: _onDocumentUploadToggle,
   onDocumentUploadSuccess: _onDocumentUploadSuccess,
   onDocumentUploadError: _onDocumentUploadError,
@@ -106,8 +103,8 @@ export default function CompletionForm({
   layout = "default",
   doctorUid,
   onOpenDocuments,
-  latestRecommendation,
-  onLastVisitClick,
+  latestRecommendation: _latestRecommendation,
+  onLastVisitClick: _onLastVisitClick,
   isReturningPatient,
   historyDocuments,
   onDocumentClick,
@@ -178,7 +175,7 @@ export default function CompletionForm({
     })
   }
 
-  const sameDoctorHistory = patientHistory.filter(
+  const _sameDoctorHistory = patientHistory.filter(
     (historyItem: AppointmentType) =>
       historyItem.doctorId === appointment.doctorId &&
       historyItem.id !== appointment.id &&
@@ -186,7 +183,7 @@ export default function CompletionForm({
   )
 
   if (layout === "workspace") {
-    const leftExtraBottom = (
+    const _leftExtraBottom = (
       <>
         {completionData.recheckupRequired && (
           <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -231,7 +228,7 @@ export default function CompletionForm({
       </>
     )
 
-    const headerLeading = (
+    const _headerLeading = (
       <div className="flex items-center gap-2 min-w-0">
         <button
           type="button"

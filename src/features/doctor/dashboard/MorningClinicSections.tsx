@@ -5,7 +5,7 @@ import { Button } from '@/shared/components'
 import ClinicalStatusBadge from "@/features/doctor/clinical/ClinicalStatusBadge"
 import ClinicalEmptyState from "@/features/doctor/clinical/ClinicalEmptyState"
 import PatientAvatar from "@/features/doctor/clinical/PatientAvatar"
-import type { Appointment } from "@/types/patient"
+import type { Appointment, Admission } from "@/types/patient"
 import {
   AlertTriangle,
   ArrowRight,
@@ -52,6 +52,65 @@ function getGreeting() {
   return "Good evening"
 }
 
+export function formatIpdNo(ipdNo?: string | null): string {
+  if (!ipdNo) return "IPD: N/A"
+  const trimmed = ipdNo.trim()
+  if (trimmed.toUpperCase().startsWith("IPD")) {
+    return trimmed
+  }
+  return `IPD-${trimmed}`
+}
+
+export function formatDaysAdmitted(checkInAt?: string | null): string {
+  if (!checkInAt) return "Admission date N/A"
+  const checkInDate = new Date(checkInAt)
+  if (isNaN(checkInDate.getTime())) return "Admission date N/A"
+
+  const now = new Date()
+  const checkInMidnight = new Date(checkInDate.getFullYear(), checkInDate.getMonth(), checkInDate.getDate())
+  const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diffTime = nowMidnight.getTime() - checkInMidnight.getTime()
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+
+  if (diffDays <= 0) return "Admitted today"
+  if (diffDays === 1) return "Admitted 1 day ago"
+  return `Admitted ${diffDays} days ago`
+}
+
+export function getInpatientRoundInfo(admission: Admission) {
+  const rounds = Array.isArray(admission.doctorRounds) ? admission.doctorRounds : []
+  const lastRound = rounds.length > 0 ? rounds[rounds.length - 1] : null
+
+  let isRoundDoneToday = false
+  let lastRoundText = "No rounds yet"
+
+  if (lastRound && lastRound.roundAt) {
+    const roundDate = new Date(lastRound.roundAt)
+    if (!isNaN(roundDate.getTime())) {
+      const todayStr = new Date().toDateString()
+      if (roundDate.toDateString() === todayStr) {
+        isRoundDoneToday = true
+        lastRoundText = `Today at ${roundDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+      } else {
+        const yesterday = new Date()
+        yesterday.setDate(yesterday.getDate() - 1)
+        if (roundDate.toDateString() === yesterday.toDateString()) {
+          lastRoundText = "Yesterday"
+        } else {
+          lastRoundText = roundDate.toLocaleDateString([], { month: "short", day: "numeric" })
+        }
+      }
+    }
+  }
+
+  return {
+    isRoundDoneToday,
+    lastRoundText,
+    lastRound,
+    roundCount: rounds.length,
+  }
+}
+
 interface MorningGreetingProps {
   doctorName: string
   specialization: string
@@ -62,6 +121,9 @@ interface MorningGreetingProps {
   emergencyCount: number
   dateLabel: string
   onOpenQueue: () => void
+  activeInpatientsCount?: number
+  roundsDueCount?: number
+  dischargeRequestsCount?: number
 }
 
 export function MorningGreeting({
@@ -74,6 +136,9 @@ export function MorningGreeting({
   emergencyCount,
   dateLabel,
   onOpenQueue,
+  activeInpatientsCount = 0,
+  roundsDueCount = 0,
+  dischargeRequestsCount = 0,
 }: MorningGreetingProps) {
   return (
     <section className="clinical-surface overflow-hidden">
@@ -97,8 +162,8 @@ export function MorningGreeting({
         <PulseItem label="Waiting now" value={waitingCount} />
         <PulseItem label="Pending today" value={pendingCount} />
         <PulseItem label="Follow-ups" value={followUpCount} />
-        <PulseItem label="Reports to review" value={reportsCount} />
-        <PulseItem label="Urgent cases" value={emergencyCount} highlight={emergencyCount > 0} />
+        <PulseItem label="Active IPD" value={activeInpatientsCount} />
+        <PulseItem label="Rounds due" value={roundsDueCount} highlight={roundsDueCount > 0} />
       </div>
     </section>
   )
@@ -473,6 +538,161 @@ export function ClinicNotifications({
           </li>
         ))}
       </ul>
+    </section>
+  )
+}
+
+interface ActiveInpatientsSectionProps {
+  inpatients: Admission[]
+  loading: boolean
+  error: string | null
+  onViewPatient: (admission: Admission) => void
+  onStartRound: (admission: Admission) => void
+}
+
+export function ActiveInpatientsSection({
+  inpatients,
+  loading,
+  error,
+  onViewPatient,
+  onStartRound,
+}: ActiveInpatientsSectionProps) {
+  const activeAdmissions = inpatients.filter(
+    (patient) => patient.status === "admitted" || patient.status === "scheduled"
+  )
+  const displayedInpatients = activeAdmissions.slice(0, 3)
+  const remainingCount = activeAdmissions.length - displayedInpatients.length
+
+  return (
+    <section className="clinical-surface overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <h3 className="text-sm font-semibold text-slate-800">Active Inpatients</h3>
+          <span className="inline-flex items-center rounded-full bg-teal-50 border border-teal-200/60 px-2.5 py-0.5 text-xs font-semibold text-teal-800 tabular-nums">
+            {activeAdmissions.length} active
+          </span>
+        </div>
+        <Link
+          href="/doctor-dashboard/inpatients"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-primary)] hover:underline"
+        >
+          View All Inpatients
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+
+      {loading ? (
+        <div className="p-6 text-center text-sm text-slate-500">Loading active inpatients...</div>
+      ) : error ? (
+        <div className="p-4 text-xs text-rose-700 bg-rose-50 border-t border-rose-100">
+          Unable to load inpatient summary: {error}
+        </div>
+      ) : activeAdmissions.length === 0 ? (
+        <div className="p-6 text-center">
+          <p className="text-sm font-medium text-slate-700">No active inpatients</p>
+          <p className="text-xs text-slate-500 mt-1">You don&apos;t currently have any admitted patients assigned to you.</p>
+        </div>
+      ) : (
+        <div className="p-4 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {displayedInpatients.map((patient) => {
+              const roundInfo = getInpatientRoundInfo(patient)
+              const daysAdmittedText = formatDaysAdmitted(patient.checkInAt)
+              const ipdLabel = formatIpdNo(patient.ipdNo)
+              const roomLabel = patient.roomNumber
+                ? `Room ${patient.roomNumber}${patient.roomType && patient.roomType !== "custom" ? ` (${patient.roomType})` : ""}`
+                : "No room assigned"
+              const hasDischargeRequest = patient.dischargeRequest?.status === "pending"
+
+              return (
+                <div
+                  key={patient.id}
+                  className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 hover:border-teal-200 hover:shadow-sm transition-all"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-sm font-bold text-slate-900 truncate">
+                            {patient.patientName || "Unknown Patient"}
+                          </p>
+                          {patient.status === "scheduled" && (
+                            <span className="inline-flex items-center rounded-md bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                              Pre-Booked
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {patient.patientId ? `PID: ${patient.patientId}` : "PID: N/A"}
+                        </p>
+                      </div>
+                      <PatientAvatar name={patient.patientName || undefined} size="sm" />
+                    </div>
+
+                    <div className="mt-3 text-xs space-y-1 text-slate-600 border-t border-slate-100 pt-2.5">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-semibold text-slate-700 truncate">{ipdLabel}</span>
+                        <span className="truncate text-slate-500">{roomLabel}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1 text-[11px]">
+                        <span className="text-slate-500">{daysAdmittedText}</span>
+                        <span className="text-slate-500 truncate">Last round: {roundInfo.lastRoundText}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+                      {roundInfo.isRoundDoneToday ? (
+                        <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                          Round completed today
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                          Round pending today
+                        </span>
+                      )}
+
+                      {hasDischargeRequest && (
+                        <span className="inline-flex items-center rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
+                          Discharge requested
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => onViewPatient(patient)}
+                      className="flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-center"
+                    >
+                      View Patient
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onStartRound(patient)}
+                      className="flex-1 rounded-lg bg-teal-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-teal-700 transition-colors text-center"
+                    >
+                      {roundInfo.isRoundDoneToday ? "View Round" : "Start Round"}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {remainingCount > 0 && (
+            <div className="flex items-center justify-between pt-1 px-1">
+              <span className="text-xs font-medium text-slate-500">+ {remainingCount} more patient{remainingCount > 1 ? "s" : ""}</span>
+              <Link
+                href="/doctor-dashboard/inpatients"
+                className="text-xs font-semibold text-[var(--color-primary)] hover:underline"
+              >
+                View All Inpatients →
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   )
 }

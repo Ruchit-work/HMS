@@ -19,12 +19,13 @@ import { TabSkeleton } from '@/shared/components'
 import { Button } from '@/shared/components'
 import VisitingHoursEditor from "@/features/doctor/schedule/VisitingHoursEditor"
 import BlockedDatesManager from "@/features/doctor/schedule/BlockedDatesManager"
-import { VisitingHours, BlockedDate, Appointment } from "@/types/patient"
+import { VisitingHours, BlockedDate, Appointment, Admission } from "@/types/patient"
 import { DEFAULT_VISITING_HOURS } from "@/shared/utils/timeSlots"
 import { Notification } from '@/shared/components'
 import { useNotificationBadge } from "@/shared/hooks/useNotificationBadge"
 import type { Branch } from "@/types/branch"
 import {
+  ActiveInpatientsSection,
   AppointmentQueueList,
   ClinicNotifications,
   MorningGreeting,
@@ -229,6 +230,79 @@ export default function DoctorDashboard() {
     router.push("/doctor-dashboard/appointments")
   }
 
+  const [inpatients, setInpatients] = useState<Admission[]>([])
+  const [loadingInpatients, setLoadingInpatients] = useState(false)
+  const [inpatientsError, setInpatientsError] = useState<string | null>(null)
+
+  const fetchInpatientsData = useCallback(async () => {
+    if (!user || !activeHospitalId) return
+    try {
+      setLoadingInpatients(true)
+      setInpatientsError(null)
+      const currentUser = auth.currentUser
+      if (!currentUser) return
+      const token = await currentUser.getIdToken()
+      const res = await fetch("/api/doctor/inpatients", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || "Failed to load active inpatients")
+      }
+      const data = await res.json().catch(() => ({}))
+      const rows = Array.isArray(data?.admissions) ? data.admissions : []
+      setInpatients(rows as Admission[])
+    } catch (err: any) {
+      setInpatientsError(err?.message || "Failed to load active inpatients")
+    } finally {
+      setLoadingInpatients(false)
+    }
+  }, [user, activeHospitalId])
+
+  useEffect(() => {
+    fetchInpatientsData()
+  }, [fetchInpatientsData])
+
+  const activeInpatients = useMemo(
+    () => inpatients.filter((patient) => patient.status === "admitted" || patient.status === "scheduled"),
+    [inpatients]
+  )
+
+  const roundsDueCount = useMemo(() => {
+    const todayStr = new Date().toDateString()
+    return activeInpatients.filter((patient) => {
+      if (patient.status !== "admitted") return false
+      const rounds = Array.isArray(patient.doctorRounds) ? patient.doctorRounds : []
+      const lastRound = rounds.length > 0 ? rounds[rounds.length - 1] : null
+      if (!lastRound || !lastRound.roundAt) return true
+      const roundDate = new Date(lastRound.roundAt)
+      return isNaN(roundDate.getTime()) || roundDate.toDateString() !== todayStr
+    }).length
+  }, [activeInpatients])
+
+  const dischargeRequestsCount = useMemo(() => {
+    return activeInpatients.filter((patient) => patient.dischargeRequest?.status === "pending").length
+  }, [activeInpatients])
+
+  const handleViewInpatient = useCallback(
+    (admission: Admission) => {
+      sessionStorage.setItem("viewAdmissionId", admission.id)
+      router.push("/doctor-dashboard/inpatients")
+    },
+    [router]
+  )
+
+  const handleStartInpatientRound = useCallback(
+    (admission: Admission) => {
+      sessionStorage.setItem("expandAdmissionId", admission.id)
+      router.push("/doctor-dashboard/inpatients")
+    },
+    [router]
+  )
+
   const clinic = useMemo(() => buildMorningClinicSnapshot(appointments), [appointments])
 
   const doctorBranchIds = Array.isArray(userData?.branchIds) ? userData.branchIds : []
@@ -266,21 +340,25 @@ export default function DoctorDashboard() {
         emergencyCount={clinic.emergencyCount}
         dateLabel={dateLabel}
         onOpenQueue={openQueue}
+        activeInpatientsCount={activeInpatients.length}
+        roundsDueCount={roundsDueCount}
+        dischargeRequestsCount={dischargeRequestsCount}
       />
 
       {visibleBranches.length > 0 && (
-        <ClinicalFormSection
-          title="Branch"
-          description="Filter today's operational view by clinic location."
-          actions={
+        <section className="clinical-surface px-5 py-3.5 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
             <Building2 className="w-4 h-4 text-slate-400" aria-hidden />
-          }
-        >
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">Branch</h3>
+              <p className="text-xs text-slate-500">Filter operational view by location</p>
+            </div>
+          </div>
           <select
             value={selectedBranchId || ""}
             onChange={(e) => setSelectedBranchId(e.target.value || null)}
             disabled={loadingBranches}
-            className="w-full max-w-md hms-input"
+            className="w-full sm:w-auto sm:min-w-[220px] max-w-xs hms-input text-xs py-1.5"
             aria-label="Select branch"
           >
             {!hasSingleVisibleBranch && <option value="">All branches</option>}
@@ -290,7 +368,7 @@ export default function DoctorDashboard() {
               </option>
             ))}
           </select>
-        </ClinicalFormSection>
+        </section>
       )}
 
       {/* Primary clinical row: Next patient + waiting queue */}
@@ -317,8 +395,17 @@ export default function DoctorDashboard() {
         onRefresh={handleRefreshAppointments}
       />
 
-      {/* Follow-ups, reports, actions, notifications */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-5 min-w-0 [&>*]:min-w-0">
+      {/* Active Inpatients Section */}
+      <ActiveInpatientsSection
+        inpatients={inpatients}
+        loading={loadingInpatients}
+        error={inpatientsError}
+        onViewPatient={handleViewInpatient}
+        onStartRound={handleStartInpatientRound}
+      />
+
+      {/* Follow-ups and Quick clinical actions */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-5 min-w-0 [&>*]:min-w-0">
         <AppointmentQueueList
           title="Follow-ups"
           subtitle="Re-checkups and return visits"
@@ -328,31 +415,7 @@ export default function DoctorDashboard() {
           onSelect={viewAppointmentDetails}
           maxItems={5}
         />
-        <AppointmentQueueList
-          title="Pending reports"
-          subtitle="Lab, imaging, or results to review"
-          appointments={clinic.pendingReports}
-          emptyTitle="No reports flagged"
-          emptyDescription={
-            <>
-              Open{" "}
-              <Link href="/doctor-dashboard/settings" className="text-[var(--color-primary)] hover:underline">
-                Settings → Documents
-              </Link>{" "}
-              to browse all files.
-            </>
-          }
-          onSelect={viewAppointmentDetails}
-          maxItems={5}
-          showTime={false}
-        />
         <QuickClinicalActions pendingBadge={appointmentsBadge.displayCount} />
-        <ClinicNotifications
-          emergencyCases={clinic.emergencyCases}
-          unsavedScheduleCount={blockedDrafts.length}
-          campaignCount={campaigns.length}
-          onSelectPatient={viewAppointmentDetails}
-        />
       </div>
 
       {campaigns.length > 0 && (
